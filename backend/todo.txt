@@ -1,0 +1,6 @@
+1. using fast api i think, node js works as well 
+2. frontend will be react 
+3. db postgres 
+4. we will use docker compose 
+5. we will use micro service : decide later what services 
+6. use azure vm to deploy (wont use kubernetes maybe)

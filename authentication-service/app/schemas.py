@@ -1,9 +1,12 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 
 
 class UserCreate(BaseModel):
     email: EmailStr
     full_name: str
+    phone: str | None = None
     password: str
 
 
@@ -13,15 +16,13 @@ class LoginRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: int
+    user_id: int
     email: EmailStr
     full_name: str
-    is_active: bool
-
-    model_config = {"from_attributes": True}
+    phone: str | None = None
+    created_at: datetime
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    recommendations: list[str] = []

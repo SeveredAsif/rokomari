@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: rokomari-postgres
     restart: unless-stopped
     env_file:
@@ -27,7 +27,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL}
@@ -37,35 +37,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      recommendation-service:
-        condition: service_started
 
-  recommendation-service:
-    build:
-      context: ./recommendation-service
-    container_name: rokomari-recommendation-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      SERVICE_TO_SERVICE_TOKEN: ${SERVICE_TO_SERVICE_TOKEN}
-    ports:
-      - "8001:8001"
-
-  frontend:
-    build:
-      context: ./frontend
-    container_name: rokomari-frontend
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-    ports:
-      - "3000:3000"
-    depends_on:
-      authentication-service:
-        condition: service_started
 
 volumes:
   postgres_data:

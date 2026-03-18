@@ -1,101 +1,215 @@
-import os
+from pathlib import Path
 
-import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from database import engine
+from sqlalchemy.orm import Session
 
-
-#from .database import Base, engine, get_db
-#from .models import User
-#from .schemas import LoginRequest, TokenResponse, UserCreate, UserResponse
-#from .security import create_access_token, decode_access_token, hash_password, verify_password
+try:
+    from .database import get_db
+    from .schemas import LoginRequest, TokenResponse, UserCreate, UserResponse
+    from .security import create_access_token, decode_access_token, hash_password, verify_password
+except ImportError:
+    from database import get_db
+    from schemas import LoginRequest, TokenResponse, UserCreate, UserResponse
+    from security import create_access_token, decode_access_token, hash_password, verify_password
 
 load_dotenv()
 
-app = FastAPI(title="Authentication Service", version="0.1.0")
+app = FastAPI(title="Authentication Service", version="0.2.0")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-RECOMMENDATION_SERVICE_URL = os.getenv(
-    "RECOMMENDATION_SERVICE_URL", "http://recommendation-service:8001"
-)
-SERVICE_TO_SERVICE_TOKEN = os.getenv("SERVICE_TO_SERVICE_TOKEN", "internal-token")
+REQUIRED_TABLES = [
+    "users",
+    "admins",
+    "categories",
+    "products",
+    "book_details",
+    "electronics_details",
+    "search_history",
+    "product_visits",
+    "addresses",
+    "cart",
+    "cart_items",
+    "orders",
+    "order_items",
+    "payments",
+    "order_status_history",
+]
 
 
-# @app.on_event("startup")
-# def on_startup():
-#     Base.metadata.create_all(bind=engine)
+def _table_creation_sql_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "table_creation.sql"
+
+
+def _execute_sql_file(db: Session, sql_path: Path) -> None:
+    script = sql_path.read_text(encoding="utf-8")
+    connection = db.connection().connection
+    previous_autocommit = getattr(connection, "autocommit", False)
+
+    try:
+        connection.autocommit = True
+        with connection.cursor() as cursor:
+            cursor.execute(script)
+    finally:
+        connection.autocommit = previous_autocommit
+
+
+def ensure_schema_and_seed(db: Session) -> None:
+    existing = {
+        row[0]
+        for row in db.execute(
+            text(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                """
+            )
+        ).fetchall()
+    }
+
+    missing_tables = [table for table in REQUIRED_TABLES if table not in existing]
+
+    if missing_tables:
+        # Run the provided DDL script only when core schema is absent.
+        if "users" not in existing:
+            sql_file = _table_creation_sql_path()
+            if not sql_file.exists():
+                raise RuntimeError(f"Missing SQL file: {sql_file}")
+            _execute_sql_file(db, sql_file)
+        else:
+            raise RuntimeError(
+                "Some required tables are missing but users table already exists. "
+                "Skipping table_creation.sql to avoid destructive DROP SCHEMA. "
+                f"Missing: {', '.join(missing_tables)}"
+            )
+
+    users_count = db.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+    if users_count == 0:
+        db.execute(
+            text(
+                """
+                INSERT INTO users (full_name, email, phone, password_hash)
+                VALUES
+                    (:name1, :email1, :phone1, :password1),
+                    (:name2, :email2, :phone2, :password2)
+                """
+            ),
+            {
+                "name1": "Demo User",
+                "email1": "demo@rokomari.com",
+                "phone1": "01700000001",
+                "password1": hash_password("demo1234"),
+                "name2": "Test User",
+                "email2": "test@rokomari.com",
+                "phone2": "01700000002",
+                "password2": hash_password("test1234"),
+            },
+        )
+        db.commit()
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    db = next(get_db())
+    try:
+        ensure_schema_and_seed(db)
+    finally:
+        db.close()
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "Authentication service is running"}
 
 
 @app.get("/health")
-def health_check():
+def health_check(db: Session = Depends(get_db)) -> dict[str, str]:
+    db.execute(text("SELECT 1"))
     return {"status": "ok", "service": "authentication-service"}
 
-@app.get("/")
-def health_check():
-    return {"res": "App Running"}
+
+@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
+    existing_user = db.execute(
+        text("SELECT user_id FROM users WHERE email = :email"),
+        {"email": payload.email},
+    ).fetchone()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    inserted = db.execute(
+        text(
+            """
+            INSERT INTO users (full_name, email, phone, password_hash)
+            VALUES (:full_name, :email, :phone, :password_hash)
+            RETURNING user_id, full_name, email, phone, created_at
+            """
+        ),
+        {
+            "full_name": payload.full_name,
+            "email": payload.email,
+            "phone": payload.phone,
+            "password_hash": hash_password(payload.password),
+        },
+    ).fetchone()
+    db.commit()
+
+    return UserResponse(
+        user_id=inserted.user_id,
+        full_name=inserted.full_name,
+        email=inserted.email,
+        phone=inserted.phone,
+        created_at=inserted.created_at,
+    )
 
 
+@app.post("/auth/login", response_model=TokenResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    user = db.execute(
+        text(
+            """
+            SELECT user_id, email, password_hash
+            FROM users
+            WHERE email = :email
+            """
+        ),
+        {"email": payload.email},
+    ).fetchone()
 
-@app.get("/test-db")
-def test_db():
-    with engine.connect() as conn:
-        result = conn.execute(text("SELECT 1"))
-        return {"db": "connected", "result": [row[0] for row in result]}
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
-# @app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-# def register_user(payload: UserCreate, db: Session = Depends(get_db)):
-#     existing_user = db.query(User).filter(User.email == payload.email).first()
-#     if existing_user:
-#         raise HTTPException(status_code=400, detail="Email already registered")
-
-#     user = User(
-#         email=payload.email,
-#         full_name=payload.full_name,
-#         hashed_password=hash_password(payload.password),
-#     )
-#     db.add(user)
-#     db.commit()
-#     db.refresh(user)
-#     return user
+    token = create_access_token(subject=user.email)
+    return TokenResponse(access_token=token)
 
 
-# @app.post("/auth/login", response_model=TokenResponse)
-# def login(payload: LoginRequest, db: Session = Depends(get_db)):
-#     user = db.query(User).filter(User.email == payload.email).first()
-#     if not user or not verify_password(payload.password, user.hashed_password):
-#         raise HTTPException(status_code=401, detail="Invalid email or password")
+@app.get("/auth/me", response_model=UserResponse)
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> UserResponse:
+    email = decode_access_token(token)
+    if not email:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-#     token = create_access_token(subject=user.email)
-#     recommendations = fetch_recommendations_for_user(user.id)
+    user = db.execute(
+        text(
+            """
+            SELECT user_id, full_name, email, phone, created_at
+            FROM users
+            WHERE email = :email
+            """
+        ),
+        {"email": email},
+    ).fetchone()
 
-#     return TokenResponse(access_token=token, recommendations=recommendations)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-
-# @app.get("/auth/me", response_model=UserResponse)
-# def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-#     email = decode_access_token(token)
-#     if not email:
-#         raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-#     user = db.query(User).filter(User.email == email).first()
-#     if not user:
-#         raise HTTPException(status_code=404, detail="User not found")
-
-#     return user
-
-
-def fetch_recommendations_for_user(user_id: int) -> list[str]:
-    try:
-        with httpx.Client(timeout=3.0) as client:
-            response = client.get(
-                f"{RECOMMENDATION_SERVICE_URL}/internal/recommendations/{user_id}",
-                headers={"x-service-token": SERVICE_TO_SERVICE_TOKEN},
-            )
-        response.raise_for_status()
-        return response.json().get("recommendations", [])
-    except Exception:
-        return []
+    return UserResponse(
+        user_id=user.user_id,
+        full_name=user.full_name,
+        email=user.email,
+        phone=user.phone,
+        created_at=user.created_at,
+    )

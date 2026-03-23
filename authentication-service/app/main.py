@@ -1,8 +1,10 @@
 from pathlib import Path
+import os
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+import httpx
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,7 @@ load_dotenv()
 
 app = FastAPI(title="Authentication Service", version="0.2.0")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+RECOMMENDATION_SERVICE_URL = os.getenv("RECOMMENDATION_SERVICE_URL", "http://recommendation-service:8001")
 
 REQUIRED_TABLES = [
     "users",
@@ -129,6 +132,22 @@ def root() -> dict[str, str]:
 def health_check(db: Session = Depends(get_db)) -> dict[str, str]:
     db.execute(text("SELECT 1"))
     return {"status": "ok", "service": "authentication-service"}
+
+
+@app.get("/auth/recommendation-demo")
+def recommendation_demo() -> dict:
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            response = client.get(f"{RECOMMENDATION_SERVICE_URL}/hello")
+        response.raise_for_status()
+        payload = response.json()
+        print(f"Recommendation service replied: {payload}")
+        return {
+            "called_service": "recommendation-service",
+            "response": payload,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"recommendation-service unavailable: {exc}")
 
 
 @app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

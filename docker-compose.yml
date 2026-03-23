@@ -18,7 +18,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
   authentication-service:
     build:
       context: ./authentication-service
@@ -37,6 +36,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      recommendation-service:
+        condition: service_started
+
+  recommendation-service:
+    build:
+      context: ./recommendation-service
+    container_name: rokomari-recommendation-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
 
 
 volumes:

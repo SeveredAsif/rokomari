@@ -3,19 +3,31 @@ SELECT
     'User ' || i,
     'user' || i || '@mail.com',
     '017' || LPAD(i::text, 8, '0'),
-    'hash' || i
+    crypt('password' || i, gen_salt('bf', 10))
 FROM generate_series(1, 1000) AS i;
+
+
+INSERT INTO categories (category_name)
+VALUES
+    ('Books'),
+    ('Stationery'),
+    ('Electronics'),
+    ('Gift Items'),
+    ('Other');
 
 
 
 INSERT INTO admins (user_id)
-SELECT user_id FROM users WHERE user_id <= 10;
+SELECT user_id
+FROM users
+ORDER BY user_id
+LIMIT 10;
 
 
 INSERT INTO products (product_name, category_id, price, stock_qty, brand, product_type)
 SELECT 
     'Product ' || i,
-    (RANDOM()*4 + 1)::INT,
+    (SELECT category_id FROM categories ORDER BY random() LIMIT 1),
     ROUND((RANDOM()*1000 + 50)::numeric, 2),
     (RANDOM()*100)::INT,
     'Brand ' || ((i % 10) + 1),
@@ -51,16 +63,16 @@ LIMIT 200;
 
 INSERT INTO search_history (user_id, searched_keyword)
 SELECT 
-    (RANDOM()*999 + 1)::INT,
+    (SELECT user_id FROM users ORDER BY random() LIMIT 1),
     'keyword_' || i
 FROM generate_series(1, 2000) AS i;
 
 
 INSERT INTO product_visits (user_id, product_id)
 SELECT 
-    (RANDOM()*999 + 1)::INT,
-    (RANDOM()*999 + 1)::INT
-FROM generate_series(1, 3000);
+    (SELECT user_id FROM users ORDER BY random() LIMIT 1),
+    (SELECT product_id FROM products ORDER BY random() LIMIT 1)
+FROM generate_series(1, 3000) AS s(i);
 
 
 INSERT INTO addresses (user_id, recipient_name, phone, address_line, city, area, postal_code)
@@ -81,31 +93,31 @@ SELECT user_id FROM users;
 
 INSERT INTO cart_items (cart_id, product_id, quantity)
 SELECT 
-    (RANDOM()*999 + 1)::INT,
-    (RANDOM()*999 + 1)::INT,
+    (SELECT cart_id FROM cart ORDER BY random() LIMIT 1),
+    (SELECT product_id FROM products ORDER BY random() LIMIT 1),
     (RANDOM()*5 + 1)::INT
-FROM generate_series(1, 3000);
+FROM generate_series(1, 3000) AS s(i);
 
 
 
 INSERT INTO orders (user_id, address_id, total_amount, shipping_charge, discount_amount, order_status)
 SELECT 
-    (RANDOM()*999 + 1)::INT,
-    (RANDOM()*999 + 1)::INT,
+    (SELECT user_id FROM users ORDER BY random() LIMIT 1),
+    (SELECT address_id FROM addresses ORDER BY random() LIMIT 1),
     ROUND((RANDOM()*5000 + 100)::numeric, 2),
     ROUND((RANDOM()*100)::numeric, 2),
     ROUND((RANDOM()*50)::numeric, 2),
     (ARRAY['PENDING','CONFIRMED','PACKED','SHIPPED','DELIVERED'])[floor(random()*5 + 1)]
-FROM generate_series(1, 1000);
+FROM generate_series(1, 1000) AS s(i);
 
 
 
 INSERT INTO order_items (order_id, product_id, quantity)
 SELECT 
-    (RANDOM()*999 + 1)::INT,
-    (RANDOM()*999 + 1)::INT,
+    (SELECT order_id FROM orders ORDER BY random() LIMIT 1),
+    (SELECT product_id FROM products ORDER BY random() LIMIT 1),
     (RANDOM()*3 + 1)::INT
-FROM generate_series(1, 3000);
+FROM generate_series(1, 3000) AS s(i);
 
 
 
@@ -122,8 +134,8 @@ FROM orders;
 
 INSERT INTO order_status_history (order_id, status, note)
 SELECT 
-    (RANDOM()*999 + 1)::INT,
+    (SELECT order_id FROM orders ORDER BY random() LIMIT 1),
     (ARRAY['PENDING','CONFIRMED','PACKED','SHIPPED','DELIVERED'])[floor(random()*5 + 1)],
     'Auto update'
-FROM generate_series(1, 2000);
+FROM generate_series(1, 2000) AS s(i);
 

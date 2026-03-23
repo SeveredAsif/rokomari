@@ -46,17 +46,18 @@ def _table_creation_sql_path() -> Path:
     return Path(__file__).resolve().parent.parent / "table_creation.sql"
 
 
+def _insert_code_sql_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "insert_code.sql"
+
+
 def _execute_sql_file(db: Session, sql_path: Path) -> None:
     script = sql_path.read_text(encoding="utf-8")
-    connection = db.connection().connection
-    previous_autocommit = getattr(connection, "autocommit", False)
+    statements = [stmt.strip() for stmt in script.split(";") if stmt.strip()]
 
-    try:
-        connection.autocommit = True
-        with connection.cursor() as cursor:
-            cursor.execute(script)
-    finally:
-        connection.autocommit = previous_autocommit
+    print(f"Executing SQL bootstrap file: {sql_path}", flush=True)
+    for statement in statements:
+        db.execute(text(statement))
+    db.commit()
 
 
 def ensure_schema_and_seed(db: Session) -> None:
@@ -74,44 +75,27 @@ def ensure_schema_and_seed(db: Session) -> None:
     }
 
     missing_tables = [table for table in REQUIRED_TABLES if table not in existing]
-
     if missing_tables:
-        # Run the provided DDL script only when core schema is absent.
+        # Run the provided SQL bootstrap only when core schema is absent.
+        print(f"Missing tables detected: {', '.join(missing_tables)}", flush=True)
         if "users" not in existing:
-            sql_file = _table_creation_sql_path()
-            if not sql_file.exists():
-                raise RuntimeError(f"Missing SQL file: {sql_file}")
-            _execute_sql_file(db, sql_file)
+            table_sql = _table_creation_sql_path()
+            insert_sql = _insert_code_sql_path()
+
+            if not table_sql.exists():
+                raise RuntimeError(f"Missing SQL file: {table_sql}")
+            if not insert_sql.exists():
+                raise RuntimeError(f"Missing SQL file: {insert_sql}")
+
+            _execute_sql_file(db, table_sql)
+            _execute_sql_file(db, insert_sql)
+            print("Schema bootstrap completed successfully.", flush=True)
         else:
             raise RuntimeError(
                 "Some required tables are missing but users table already exists. "
                 "Skipping table_creation.sql to avoid destructive DROP SCHEMA. "
                 f"Missing: {', '.join(missing_tables)}"
             )
-
-    users_count = db.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
-    if users_count == 0:
-        db.execute(
-            text(
-                """
-                INSERT INTO users (full_name, email, phone, password_hash)
-                VALUES
-                    (:name1, :email1, :phone1, :password1),
-                    (:name2, :email2, :phone2, :password2)
-                """
-            ),
-            {
-                "name1": "Demo User",
-                "email1": "demo@rokomari.com",
-                "phone1": "01700000001",
-                "password1": hash_password("demo1234"),
-                "name2": "Test User",
-                "email2": "test@rokomari.com",
-                "phone2": "01700000002",
-                "password2": hash_password("test1234"),
-            },
-        )
-        db.commit()
 
 
 @app.on_event("startup")

@@ -21,7 +21,7 @@ load_dotenv()
 
 app = FastAPI(title="Authentication Service", version="0.2.0")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-RECOMMENDATION_SERVICE_URL = os.getenv("RECOMMENDATION_SERVICE_URL", "http://recommendation-service:8001")
+RECOMMENDATION_SERVICE_URL = os.getenv("RECOMMENDATION_SERVICE_URL", "http://localhost:8001")
 
 REQUIRED_TABLES = [
     "users",

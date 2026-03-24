@@ -1,0 +1,6 @@
+1. relevant tables: search_history,product_visits,orders 
+2. search history: find cosine similarity between products table - product name, and search keyword. if the similarity>threshold, show it 
+3. products visits : i. show those exact products ii. find cosine similarity, show it 
+4. ordered items: find cosine siilarity and show them 
+5. caching: have some cached items to show the customer 
+6. i dont know how to use cosine similarity, have to dig into it

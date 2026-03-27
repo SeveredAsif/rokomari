@@ -101,6 +101,17 @@ def search_products(
     # --- Filter and sort ---
     results = filter_by_threshold(scores, product_dicts, threshold)
 
+    # --- Save to search_history ---
+    # We do this AFTER computing results so a DB write failure doesn't block the response
+    try:
+        history_entry = models.SearchHistory(user_id=user_id, keyword=q)
+        db.add(history_entry)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # Log but don't fail the whole request just because history save failed
+        print(f"⚠️  Could not save search history: {e}")
+
     # --- Store in cache ---
     cache_set(cache_key, results, ttl_seconds=300)
 

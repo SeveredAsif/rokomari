@@ -28,6 +28,8 @@ This document covers all currently available backend services and endpoints.
 - Recommendation Service: http://localhost:8001
 - Interaction Service: http://localhost:8002
 
+---
+
 ## 1) Authentication Service
 
 Base URL: `http://localhost:8000`
@@ -100,7 +102,7 @@ Success response:
 Gets logged-in user profile from JWT.
 
 Header:
-- Authorization: Bearer <JWT_TOKEN>
+- Authorization: Bearer \<JWT_TOKEN\>
 
 Success response:
 ```json
@@ -127,9 +129,29 @@ Success response:
 }
 ```
 
+---
+
 ## 2) Recommendation Service
 
 Base URL: `http://localhost:8001`
+
+**Authentication:** All endpoints except `/health`, `/hello`, and `/recommendations/popular`
+require a JWT token in the Authorization header:
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+Obtain the token from `POST /auth/login` on the Authentication Service.
+
+**Important note on data flow:**
+This service only **reads** from `search_history` and `product_visits`.
+Writing to those tables is handled by the Interaction Service.
+The recommended frontend workflow is:
+1. User searches → call `POST /interactions/search` (Interaction Service) to save it
+2. Then call `GET /search` (Recommendation Service) to get similarity results
+3. User visits a product → call `POST /interactions/product-visit` (Interaction Service)
+4. Then call `GET /recommendations` to get personalised results
+
+---
 
 ### GET /health
 Health check.
@@ -142,8 +164,10 @@ Example response:
 }
 ```
 
+---
+
 ### GET /hello
-Simple hello endpoint.
+Simple hello endpoint. Used by the auth service demo.
 
 Example response:
 ```json
@@ -152,6 +176,190 @@ Example response:
   "service": "recommendation-service"
 }
 ```
+
+---
+
+### GET /search
+Searches for products using cosine similarity (TF-IDF) between the query keyword
+and all product names in the database.
+
+**Auth required:** Yes (JWT)
+
+Query parameters:
+
+| Parameter   | Type   | Required | Default | Description                                      |
+|-------------|--------|----------|---------|--------------------------------------------------|
+| `q`         | string | Yes      | —       | The search keyword (e.g. "history of bangladesh")|
+| `threshold` | float  | No       | `0.1`   | Minimum similarity score to include (0.0 – 1.0) |
+
+Example request:
+```
+GET /search?q=history+of+bangladesh&threshold=0.2
+Authorization: Bearer <JWT_TOKEN>
+```
+
+Success response:
+```json
+{
+  "source": "db",
+  "query": "history of bangladesh",
+  "count": 3,
+  "results": [
+    {
+      "id": 12,
+      "name": "Bangladesh Liberation War",
+      "description": "...",
+      "author": "...",
+      "category": "History",
+      "price": 350.0,
+      "image_url": "...",
+      "similarity_score": 0.7213
+    },
+    {
+      "id": 7,
+      "name": "History of South Asia",
+      "description": "...",
+      "author": "...",
+      "category": "History",
+      "price": 420.0,
+      "image_url": "...",
+      "similarity_score": 0.3104
+    }
+  ]
+}
+```
+
+When result is served from cache:
+```json
+{
+  "source": "cache",
+  "results": [ ... ]
+}
+```
+
+Error responses:
+- `401` — Missing or invalid JWT token
+- `422` — Missing required `q` parameter
+
+**How it works:**
+1. Checks cache first (key: `search:<user_id>:<keyword>`, TTL 5 min)
+2. On cache miss: fetches all products, computes TF-IDF cosine similarity between `q` and every product name
+3. Filters out results below `threshold`, sorts by score descending
+4. Caches and returns results
+
+---
+
+### GET /recommendations
+Returns personalised product recommendations for the logged-in user,
+combining three signals from their activity history.
+
+**Auth required:** Yes (JWT)
+
+Query parameters:
+
+| Parameter   | Type  | Required | Default | Description                                      |
+|-------------|-------|----------|---------|--------------------------------------------------|
+| `limit`     | int   | No       | `10`    | Max number of results to return (1 – 50)         |
+| `threshold` | float | No       | `0.1`   | Minimum similarity score to include (0.0 – 1.0) |
+
+Example request:
+```
+GET /recommendations?limit=10&threshold=0.15
+Authorization: Bearer <JWT_TOKEN>
+```
+
+Success response:
+```json
+{
+  "source": "db",
+  "user_id": 1001,
+  "count": 5,
+  "results": [
+    {
+      "id": 15,
+      "name": "Atomic Habits",
+      "description": "...",
+      "author": "James Clear",
+      "category": "Self-help",
+      "price": 500.0,
+      "image_url": "...",
+      "similarity_score": 0.8821
+    }
+  ]
+}
+```
+
+Error responses:
+- `401` — Missing or invalid JWT token
+
+**How it works (three signals):**
+
+| Signal | Source table | Logic |
+|--------|-------------|-------|
+| Search history | `search_history` | Finds products similar to past search keywords |
+| Product visits (direct) | `product_visits` | Re-surfaces the exact products the user visited |
+| Product visits (similar) | `product_visits` | Finds products similar to visited product names |
+| Order history | `orders` | Finds products similar to previously ordered product names |
+
+Results from all signals are merged, deduplicated (highest score wins on duplicates),
+sorted by score descending, and trimmed to `limit`.
+
+Cache key: `recommendations:<user_id>`, TTL 5 minutes.
+
+---
+
+### GET /recommendations/popular
+Returns the most visited products across all users.
+
+**Auth required:** No
+
+This is the fallback recommendation shown to new users or logged-out visitors
+who don't yet have any search history, visits, or orders.
+
+Query parameters:
+
+| Parameter | Type | Required | Default | Description                      |
+|-----------|------|----------|---------|----------------------------------|
+| `limit`   | int  | No       | `10`    | Max number of results (1 – 50)   |
+
+Example request:
+```
+GET /recommendations/popular?limit=5
+```
+
+Success response:
+```json
+{
+  "source": "db",
+  "count": 5,
+  "results": [
+    {
+      "id": 20,
+      "name": "Atomic Habits",
+      "description": "...",
+      "author": "James Clear",
+      "category": "Self-help",
+      "price": 500.0,
+      "image_url": "...",
+      "visit_count": 342
+    },
+    {
+      "id": 8,
+      "name": "Rich Dad Poor Dad",
+      "description": "...",
+      "author": "Robert Kiyosaki",
+      "category": "Finance",
+      "price": 380.0,
+      "image_url": "...",
+      "visit_count": 289
+    }
+  ]
+}
+```
+
+Cache key: `recommendations:popular`, TTL 15 minutes (longer since it changes slowly).
+
+---
 
 ## 3) Interaction Service
 
@@ -318,6 +526,8 @@ Success response (201):
 }
 ```
 
+---
+
 ## Error Response Format
 
 Most validation and business errors return:
@@ -333,14 +543,18 @@ Common examples:
 - 404: user/product/address not found
 - 503: downstream service unavailable
 
+---
+
 ## Suggested Frontend Workflow
 
 1. Register or login from auth service.
 2. Save JWT token from `/auth/login`.
 3. Use `/auth/me` to verify session.
-4. For user actions, call interaction-service endpoints:
-   - product click -> `/interactions/product-visit`
-   - search -> `/interactions/search`
-   - address save -> `/interactions/address`
-   - cart save -> `/interactions/cart/save`
-   - place order -> `/interactions/order`
+4. Show popular books on homepage → `GET /recommendations/popular` (no auth needed).
+5. User types in search box:
+   - Save the keyword → `POST /interactions/search` (Interaction Service)
+   - Get similarity results → `GET /search?q=<keyword>` (Recommendation Service)
+6. User clicks a product:
+   - Record the visit → `POST /interactions/product-visit` (Interaction Service)
+7. Show personalised recommendations → `GET /recommendations` (Recommendation Service)
+8. For user actions (address, cart, order) → call Interaction Service endpoints as before.

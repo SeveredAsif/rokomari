@@ -39,13 +39,24 @@ services:
       recommendation-service:
         condition: service_started
 
+  
   recommendation-service:
     build:
-      context: ./recommendation-service
+      context: ./recommendation-service      
     container_name: rokomari-recommendation-service
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      SERVICE_TO_SERVICE_TOKEN: ${SERVICE_TO_SERVICE_TOKEN}
+      REDIS_URL: ${REDIS_URL}
     ports:
       - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   interaction-service:
     build:

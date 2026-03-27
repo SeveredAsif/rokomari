@@ -18,6 +18,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   authentication-service:
     build:
       context: ./authentication-service
@@ -58,6 +59,24 @@ services:
       postgres:
         condition: service_healthy
 
+  productsearch-service:
+    build:
+      context: ./productSearch-service
+    container_name: rokomari-productsearch-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET_KEY}
+      SERVICE_TO_SERVICE_TOKEN: ${SERVICE_TO_SERVICE_TOKEN}
+      REDIS_URL: ${REDIS_URL}
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   interaction-service:
     build:
       context: ./interaction-service
@@ -68,7 +87,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     ports:
-      - "8002:8002"
+      - "8004:8002"
     depends_on:
       postgres:
         condition: service_healthy

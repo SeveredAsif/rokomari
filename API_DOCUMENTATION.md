@@ -8,7 +8,8 @@ Each backend service runs in its own Docker container and is accessible from the
 |-------------------------|-------------------------|---------------------------------|
 | Authentication Service  | authentication-service  | http://localhost:8000           |
 | Recommendation Service  | recommendation-service  | http://localhost:8001           |
-| Interaction Service     | interaction-service     | http://localhost:8002           |
+| Product Search Service  | productsearch-service   | http://localhost:8002           |
+| Interaction Service     | interaction-service     | http://localhost:8004           |
 
 **How to call from frontend:**
 
@@ -26,7 +27,8 @@ This document covers all currently available backend services and endpoints.
 
 - Authentication Service: http://localhost:8000
 - Recommendation Service: http://localhost:8001
-- Interaction Service: http://localhost:8002
+- Product Search Service: http://localhost:8002
+- Interaction Service: http://localhost:8004
 
 ---
 
@@ -528,6 +530,180 @@ Success response (201):
 
 ---
 
+## 3) Product Search Service
+
+Base URL: `http://localhost:8003`
+
+The Product Search Service provides semantic product search capabilities using TF-IDF vectorization and cosine similarity.
+
+### GET /health
+Checks service + database connectivity.
+
+Example response:
+```json
+{
+  "status": "ok",
+  "service": "productSearch-service"
+}
+```
+
+### GET /search
+Searches for products using semantic similarity on product names.
+
+**Auth required:** Yes (JWT)
+
+Query parameters:
+
+| Parameter   | Type  | Required | Default | Description                                      |
+|-------------|-------|----------|---------|--------------------------------------------------|
+| `q`         | str   | Yes      | —       | Search keyword (min 1 character)                |
+| `threshold` | float | No       | `0.1`   | Minimum similarity score to include (0.0 – 1.0) |
+| `limit`     | int   | No       | `50`    | Max number of results to return (1 – 200)       |
+
+Example request:
+```
+GET /search?q=history+of+bangladesh&threshold=0.2&limit=20
+Authorization: Bearer <JWT_TOKEN>
+```
+
+Success response (from database):
+```json
+{
+  "source": "db",
+  "query": "history of bangladesh",
+  "count": 3,
+  "threshold": 0.2,
+  "results": [
+    {
+      "id": 12,
+      "name": "Bangladesh Liberation War",
+      "description": "A comprehensive history...",
+      "author": "Dr. Ahmed Hassan",
+      "category": "History",
+      "price": 350.0,
+      "image_url": "...",
+      "similarity_score": 0.8214
+    },
+    {
+      "id": 7,
+      "name": "History of South Asia",
+      "description": "...",
+      "author": "Prof. Robert Smith",
+      "category": "History",
+      "price": 420.0,
+      "image_url": "...",
+      "similarity_score": 0.6104
+    }
+  ]
+}
+```
+
+When result is served from cache:
+```json
+{
+  "source": "cache",
+  "results": [ ... ]
+}
+```
+
+Error responses:
+- `401` — Missing or invalid JWT token
+- `422` — Missing required `q` parameter or invalid query format
+
+**How it works:**
+1. Checks Redis cache first (key: `search:<user_id>:<keyword>`, TTL 5 minutes)
+2. On cache miss:
+   - Fetches all products from database
+   - Computes TF-IDF vectorization of search query and product names
+   - Applies cosine similarity to find matching products
+   - Filters results below the `threshold`
+   - Sorts by similarity score descending
+3. Records search in `search_history` table for analytics
+4. Caches and returns results
+
+**Similarity scoring:**
+- Uses TF-IDF (Term Frequency-Inverse Document Frequency) vectorization
+- Considers single words and 2-word phrases (bigrams)
+- Ignores common English stopwords (the, a, is, etc.)
+- Returns scores from 0.0 (completely different) to 1.0 (identical)
+
+### GET /search/history
+Get the current user's search history.
+
+**Auth required:** Yes (JWT)
+
+Query parameters:
+
+| Parameter | Type | Required | Default | Description                      |
+|-----------|------|----------|---------|----------------------------------|
+| `limit`   | int  | No       | `20`    | Max number of searches to return (1 – 100) |
+
+Example request:
+```
+GET /search/history?limit=10
+Authorization: Bearer <JWT_TOKEN>
+```
+
+Success response:
+```json
+{
+  "user_id": 1001,
+  "count": 3,
+  "searches": [
+    {
+      "query": "history of bangladesh",
+      "timestamp": "2026-03-25T14:30:22.000000"
+    },
+    {
+      "query": "bengali literature",
+      "timestamp": "2026-03-25T13:15:45.000000"
+    }
+  ]
+}
+```
+
+Error responses:
+- `401` — Missing or invalid JWT token
+
+### GET /search/trending
+Get the most commonly searched keywords across ALL users (for analytics).
+
+**Auth required:** No
+
+Query parameters:
+
+| Parameter | Type | Required | Default | Description                      |
+|-----------|------|----------|---------|----------------------------------|
+| `limit`   | int  | No       | `10`    | Max trending searches to return (1 – 50) |
+
+Example request:
+```
+GET /search/trending?limit=15
+```
+
+Success response:
+```json
+{
+  "count": 3,
+  "trending_searches": [
+    {
+      "query": "bengali fiction",
+      "search_count": 245
+    },
+    {
+      "query": "history",
+      "search_count": 198
+    },
+    {
+      "query": "programming",
+      "search_count": 187
+    }
+  ]
+}
+```
+
+---
+
 ## Error Response Format
 
 Most validation and business errors return:
@@ -552,9 +728,10 @@ Common examples:
 3. Use `/auth/me` to verify session.
 4. Show popular books on homepage → `GET /recommendations/popular` (no auth needed).
 5. User types in search box:
-   - Save the keyword → `POST /interactions/search` (Interaction Service)
-   - Get similarity results → `GET /search?q=<keyword>` (Recommendation Service)
-6. User clicks a product:
+   - Get semantic search results → `GET /search?q=<keyword>` (Product Search Service)
+   - Get user's search history → `GET /search/history` (Product Search Service)
+6. Show trending searches on homepage → `GET /search/trending` (Product Search Service, no auth needed)
+7. User clicks a product:
    - Record the visit → `POST /interactions/product-visit` (Interaction Service)
-7. Show personalised recommendations → `GET /recommendations` (Recommendation Service)
-8. For user actions (address, cart, order) → call Interaction Service endpoints as before.
+8. Show personalised recommendations → `GET /recommendations` (Recommendation Service)
+9. For user actions (address, cart, order) → call Interaction Service endpoints as before.

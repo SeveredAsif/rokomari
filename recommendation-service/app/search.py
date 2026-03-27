@@ -29,9 +29,8 @@ In FastAPI it works identically:
     app.include_router(router, prefix="/api")
 """
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from app.database import get_db
 from app.auth import verify_jwt
@@ -79,20 +78,20 @@ def search_products(
         return {"source": "db", "results": []}
 
     # Extract just the names to feed into cosine similarity
-    product_names = [p.name for p in products]
+    product_names = [p.product_name for p in products]
 
     # --- Compute cosine similarity ---
-    scores = compute_cosine_similarities(query=q, candidates=product_names)
+    scores = compute_cosine_similarities(query=q, candidates=product_names) #what is in product db and what i searched
 
     # Build list of dicts so filter_by_threshold can attach similarity_score
     product_dicts = [
         {
-            "id":          p.id,
-            "name":        p.name,
+            "id":          p.product_id,
+            "name":        p.product_name,
             "description": p.description,
-            "author":      p.author,
-            "category":    p.category,
-            "price":       p.price,
+            "author":      None,
+            "category":    None,
+            "price":       float(p.price) if p.price is not None else None,
             "image_url":   p.image_url,
         }
         for p in products
@@ -102,6 +101,7 @@ def search_products(
     results = filter_by_threshold(scores, product_dicts, threshold)
 
     # --- Store in cache ---
-    cache_set(cache_key, results, ttl_seconds=300)
+    #cache_key is the query and user
+    cache_set(cache_key, results, ttl_seconds=300) #in redis, save it. where do we use this cache? 
 
     return {"source": "db", "query": q, "count": len(results), "results": results}

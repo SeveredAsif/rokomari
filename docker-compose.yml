@@ -19,6 +19,20 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: rokomari-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   authentication-service:
     build:
       context: ./authentication-service
@@ -52,11 +66,13 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       SERVICE_TO_SERVICE_TOKEN: ${SERVICE_TO_SERVICE_TOKEN}
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: ${REDIS_URL} #have to add redis service 
     ports:
       - "8001:8001"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   productsearch-service:
@@ -75,6 +91,8 @@ services:
       - "8002:8002"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   interaction-service:
@@ -95,3 +113,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

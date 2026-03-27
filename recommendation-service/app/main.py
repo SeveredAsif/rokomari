@@ -18,7 +18,7 @@ This is your index.js / server.js. The equivalent would be:
 from fastapi import FastAPI
 from app.database import engine
 from app import models
-from app.routers import search, recommendations
+from app import search, recommendations
 
 # Create all tables that don't exist yet.
 # In production you'd use a proper migration tool (like Alembic),

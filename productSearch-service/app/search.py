@@ -43,6 +43,24 @@ from . import models
 router = APIRouter(prefix="/search", tags=["Search"])
 
 
+def _resolve_user_id(db: Session, principal: str | int | None) -> int:
+    """Resolve JWT subject to numeric user_id (supports email or id in sub)."""
+    if principal is None:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    if isinstance(principal, int):
+        return principal
+
+    principal_text = str(principal).strip()
+    if principal_text.isdigit():
+        return int(principal_text)
+
+    user = db.query(models.User).filter(models.User.email == principal_text).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.id
+
+
 @router.get("")
 def search_products(
     # Query parameter: GET /search?q=history+of+bangladesh&threshold=0.1
@@ -70,7 +88,7 @@ def search_products(
     Example:
         GET /search?q=history+of+bangladesh&threshold=0.2&limit=20
     """
-    user_id = current_user.get("sub")
+    user_id = _resolve_user_id(db, current_user.get("sub"))
 
     # --- Cache check ---
     # Key format: "search:<user_id>:<keyword>"
@@ -155,7 +173,7 @@ def get_search_history(
     Example:
         GET /search/history?limit=10
     """
-    user_id = current_user.get("sub")
+    user_id = _resolve_user_id(db, current_user.get("sub"))
 
     history = db.query(models.SearchHistory).filter(
         models.SearchHistory.user_id == user_id

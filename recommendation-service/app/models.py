@@ -18,7 +18,7 @@ IMPORTANT: These models assume the tables already exist in the database
 most of these tables. It does write to search_history.
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Numeric
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -30,13 +30,14 @@ class Product(Base):
     """
     __tablename__ = "products"
 
-    id          = Column(Integer, primary_key=True, index=True)
-    name        = Column(String, nullable=False, index=True)   # Used for cosine similarity search
-    description = Column(Text,   nullable=True)
-    author      = Column(String, nullable=True)
-    category    = Column(String, nullable=True)
-    price       = Column(Float,  nullable=True)
-    image_url   = Column(String, nullable=True)
+    product_id   = Column(Integer, primary_key=True, index=True)
+    product_name = Column(String, nullable=False, index=True)   # Used for cosine similarity search
+    category_id  = Column(Integer, ForeignKey("categories.category_id"), nullable=False)
+    price        = Column(Numeric(10, 2), nullable=True)
+    description  = Column(Text, nullable=True)
+    image_url    = Column(String, nullable=True)
+    brand        = Column(String, nullable=True)
+    product_type = Column(String, nullable=False)
 
 
 class SearchHistory(Base):
@@ -48,9 +49,9 @@ class SearchHistory(Base):
     """
     __tablename__ = "search_history"
 
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
-    keyword    = Column(String,  nullable=False)               # The search term the user typed
+    search_id   = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    searched_keyword = Column(String,  nullable=False)         # The search term the user typed
     searched_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -63,24 +64,32 @@ class ProductVisit(Base):
     """
     __tablename__ = "product_visits"
 
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    visit_id   = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
     visited_at  = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class Order(Base):
     """
-    Stores orders. Each row is one ordered item (not one whole order).
-    We READ this to find what a user has ordered before, then find
-    cosine-similar products to recommend.
+    Stores one order header row.
+    Product-level items are in order_items.
     """
     __tablename__ = "orders"
 
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    ordered_at  = Column(DateTime(timezone=True), server_default=func.now())
+    order_id   = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    order_date = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class OrderItem(Base):
+    """Items belonging to each order, used to derive ordered product signals."""
+    __tablename__ = "order_items"
+
+    order_item_id = Column(Integer, primary_key=True, index=True)
+    order_id      = Column(Integer, ForeignKey("orders.order_id"), nullable=False)
+    product_id    = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    quantity      = Column(Integer, nullable=False)
 
 
 class User(Base):
@@ -91,5 +100,5 @@ class User(Base):
     """
     __tablename__ = "users"
 
-    id    = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, primary_key=True, index=True)
     email = Column(String,  unique=True, nullable=False)

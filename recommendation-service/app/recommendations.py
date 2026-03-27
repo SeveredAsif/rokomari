@@ -18,7 +18,7 @@ deduplicate them at the end, then return the top N results.
 This is a common pattern called "candidate generation + ranking" in recommendation systems.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -35,17 +35,42 @@ SIGNAL_LIMIT = 20    # fetch up to 20 candidates per signal before similarity
 FINAL_LIMIT  = 10    # return top 10 merged recommendations
 
 
+def _resolve_user_id(db: Session, principal: str | int | None) -> int:
+    """
+    JWT 'sub' may contain either numeric user_id or user email.
+    Convert it to integer user_id for table filters.
+    """
+    if principal is None:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    if isinstance(principal, int):
+        return principal
+
+    as_text = str(principal).strip()
+    if as_text.isdigit():
+        return int(as_text)
+
+    user = (
+        db.query(models.User)
+        .filter(models.User.email == as_text)
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.user_id
+
+
 def _all_products_as_dicts(db: Session) -> list[dict]:
     """Helper: fetch all products and return as list of dicts."""
     products = db.query(models.Product).all()
     return [
         {
-            "id":          p.id,
-            "name":        p.name,
+            "id":          p.product_id,
+            "name":        p.product_name,
             "description": p.description,
-            "author":      p.author,
-            "category":    p.category,
-            "price":       p.price,
+            "author":      None,
+            "category":    None,
+            "price":       float(p.price) if p.price is not None else None,
             "image_url":   p.image_url,
         }
         for p in products
@@ -84,7 +109,7 @@ def get_recommendations(
 
     GET /recommendations?limit=10&threshold=0.1
     """
-    user_id = current_user.get("sub")
+    user_id = _resolve_user_id(db, current_user.get("sub"))
 
     # --- Cache check ---
     cache_key = f"recommendations:{user_id}"
@@ -112,7 +137,7 @@ def get_recommendations(
 
     search_results: list[dict] = []
     for search in recent_searches:
-        scores = compute_cosine_similarities(search.keyword, all_names)
+        scores = compute_cosine_similarities(search.searched_keyword, all_names)
         hits   = filter_by_threshold(scores, all_products, threshold)
         search_results.extend(hits)
 
@@ -151,15 +176,16 @@ def get_recommendations(
     # =========================================================
     # Signal 3: Order history
     # =========================================================
-    orders = (
-        db.query(models.Order)
+    ordered_items = (
+        db.query(models.OrderItem.product_id)
+        .join(models.Order, models.Order.order_id == models.OrderItem.order_id)
         .filter(models.Order.user_id == user_id)
-        .order_by(models.Order.ordered_at.desc())
+        .order_by(models.Order.order_date.desc())
         .limit(SIGNAL_LIMIT)
         .all()
     )
 
-    ordered_ids = {o.product_id for o in orders}
+    ordered_ids = {row.product_id for row in ordered_items}
 
     order_results: list[dict] = []
     for product in all_products:
@@ -217,10 +243,10 @@ def get_popular_products(
     popular_rows = (
         db.query(
             models.ProductVisit.product_id,
-            func.count(models.ProductVisit.id).label("visit_count")
+            func.count(models.ProductVisit.visit_id).label("visit_count")
         )
         .group_by(models.ProductVisit.product_id)
-        .order_by(func.count(models.ProductVisit.id).desc())
+        .order_by(func.count(models.ProductVisit.visit_id).desc())
         .limit(limit)
         .all()
     )
@@ -231,20 +257,20 @@ def get_popular_products(
     # Fetch full product details for those IDs
     products = (
         db.query(models.Product)
-        .filter(models.Product.id.in_(popular_ids))
+        .filter(models.Product.product_id.in_(popular_ids))
         .all()
     )
 
     results = [
         {
-            "id":          p.id,
-            "name":        p.name,
+            "id":          p.product_id,
+            "name":        p.product_name,
             "description": p.description,
-            "author":      p.author,
-            "category":    p.category,
-            "price":       p.price,
+            "author":      None,
+            "category":    None,
+            "price":       float(p.price) if p.price is not None else None,
             "image_url":   p.image_url,
-            "visit_count": visit_counts.get(p.id, 0),
+            "visit_count": visit_counts.get(p.product_id, 0),
         }
         for p in products
     ]

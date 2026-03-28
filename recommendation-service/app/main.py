@@ -18,7 +18,7 @@ This is your index.js / server.js. The equivalent would be:
 from fastapi import FastAPI
 from app.database import engine
 from app import models
-from app import search, recommendations
+from app import recommendations
 
 # Create all tables that don't exist yet.
 # In production you'd use a proper migration tool (like Alembic),
@@ -30,12 +30,12 @@ app = FastAPI(
     title="Rokomari Recommendation Service",
     version="0.2.0",
     description="Product search and personalised recommendation engine for Rokomari.",
+    root_path="/recommendation",
 )
 
 # Register routers
 # Each router handles a group of related endpoints.
 # Node.js equivalent: app.use('/search', searchRouter)
-app.include_router(search.router)
 app.include_router(recommendations.router)
 
 

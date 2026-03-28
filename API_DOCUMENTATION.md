@@ -23,18 +23,26 @@ Each backend service runs in its own Docker container and is accessible from the
 
 This document covers all currently available backend services and endpoints.
 
-## Base URLs (Docker)
+## Base URL (via Nginx reverse proxy)
 
-- Authentication Service: http://localhost:8000
-- Recommendation Service: http://localhost:8001
-- Product Search Service: http://localhost:8002
-- Interaction Service: http://localhost:8004
+Use `http://localhost:8080` and the service prefixes below.
+
+| Service | Base Path | Example Health URL |
+|---|---|---|
+| Authentication | `/auth` | `http://localhost:8080/auth/health` |
+| Recommendation | `/recommendation` | `http://localhost:8080/recommendation/health` |
+| Product Search | `/productsearch` | `http://localhost:8080/productsearch/health` |
+| Interaction | `/interaction` | `http://localhost:8080/interaction/health` |
+
+(Direct ports like `:8000`, `:8001` still work for local debugging.)
 
 ---
 
 ## 1) Authentication Service
 
-Base URL: `http://localhost:8000`
+Base URL (nginx): `http://localhost:8080/auth`
+
+Base URL (direct): `http://localhost:8000`
 
 ### GET /
 Checks whether auth service is running.
@@ -135,7 +143,9 @@ Success response:
 
 ## 2) Recommendation Service
 
-Base URL: `http://localhost:8001`
+Base URL (nginx): `http://localhost:8080/recommendation`
+
+Base URL (direct): `http://localhost:8001`
 
 **Authentication:** All endpoints except `/health`, `/hello`, and `/recommendations/popular`
 require a JWT token in the Authorization header:
@@ -149,7 +159,7 @@ This service only **reads** from `search_history` and `product_visits`.
 Writing to those tables is handled by the Interaction Service.
 The recommended frontend workflow is:
 1. User searches → call `POST /interactions/search` (Interaction Service) to save it
-2. Then call `GET /search` (Recommendation Service) to get similarity results
+2. Then call `GET /search` (Product Search Service) to get similarity results
 3. User visits a product → call `POST /interactions/product-visit` (Interaction Service)
 4. Then call `GET /recommendations` to get personalised results
 
@@ -178,76 +188,6 @@ Example response:
   "service": "recommendation-service"
 }
 ```
-
----
-
-### GET /search
-Searches for products using cosine similarity (TF-IDF) between the query keyword
-and all product names in the database.
-
-**Auth required:** Yes (JWT)
-
-Query parameters:
-
-| Parameter   | Type   | Required | Default | Description                                      |
-|-------------|--------|----------|---------|--------------------------------------------------|
-| `q`         | string | Yes      | —       | The search keyword (e.g. "history of bangladesh")|
-| `threshold` | float  | No       | `0.1`   | Minimum similarity score to include (0.0 – 1.0) |
-
-Example request:
-```
-GET /search?q=history+of+bangladesh&threshold=0.2
-Authorization: Bearer <JWT_TOKEN>
-```
-
-Success response:
-```json
-{
-  "source": "db",
-  "query": "history of bangladesh",
-  "count": 3,
-  "results": [
-    {
-      "id": 12,
-      "name": "Bangladesh Liberation War",
-      "description": "...",
-      "author": "...",
-      "category": "History",
-      "price": 350.0,
-      "image_url": "...",
-      "similarity_score": 0.7213
-    },
-    {
-      "id": 7,
-      "name": "History of South Asia",
-      "description": "...",
-      "author": "...",
-      "category": "History",
-      "price": 420.0,
-      "image_url": "...",
-      "similarity_score": 0.3104
-    }
-  ]
-}
-```
-
-When result is served from cache:
-```json
-{
-  "source": "cache",
-  "results": [ ... ]
-}
-```
-
-Error responses:
-- `401` — Missing or invalid JWT token
-- `422` — Missing required `q` parameter
-
-**How it works:**
-1. Checks cache first (key: `search:<user_id>:<keyword>`, TTL 5 min)
-2. On cache miss: fetches all products, computes TF-IDF cosine similarity between `q` and every product name
-3. Filters out results below `threshold`, sorts by score descending
-4. Caches and returns results
 
 ---
 
@@ -532,7 +472,9 @@ Success response (201):
 
 ## 3) Product Search Service
 
-Base URL: `http://localhost:8003`
+Base URL (nginx): `http://localhost:8080/productsearch`
+
+Base URL (direct): `http://localhost:8002`
 
 The Product Search Service provides semantic product search capabilities using TF-IDF vectorization and cosine similarity.
 

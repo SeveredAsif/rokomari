@@ -17,7 +17,7 @@ DATABASE_URL = os.getenv(
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-app = FastAPI(title="Interaction Service", version="0.1.0")
+app = FastAPI(title="Interaction Service", version="0.1.0", root_path="/interaction")
 
 
 class ProductVisitRequest(BaseModel):

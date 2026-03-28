@@ -24,6 +24,7 @@ app = FastAPI(
     title="Rokomari Product Search Service",
     version="1.0.0",
     description="Product search engine for Rokomari using cosine similarity and semantic matching.",
+    root_path="/productsearch",
 )
 
 # Enable CORS for frontend access

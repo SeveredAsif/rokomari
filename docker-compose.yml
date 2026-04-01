@@ -110,6 +110,17 @@ services:
       postgres:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+    container_name: rokomari-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      authentication-service:
+        condition: service_started
+
 
 volumes:
   postgres_data:

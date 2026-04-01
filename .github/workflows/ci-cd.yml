@@ -87,12 +87,12 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.AZURE_VM_IP }}
-          username: ${{ secrets.AZURE_VM_USER }}
-          key: ${{ secrets.AZURE_VM_SSH_KEY }}
-          port: ${{ secrets.AZURE_VM_PORT }}
+          username: asif_televerse
+          key: ${{ secrets.AZURE_VM_KEY }}
+          port: 22
           script: |
             set -e
-            cd ${{ secrets.AZURE_VM_APP_PATH }}
+            cd .
             git pull origin main
             docker compose down
             docker image prune -f

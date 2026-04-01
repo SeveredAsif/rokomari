@@ -1,0 +1,99 @@
+name: Build, Push, and Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and run tests (if present)
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          pip install pytest
+
+          for service in authentication-service recommendation-service productSearch-service interaction-service; do
+            if [ -f "$service/requirements.txt" ]; then
+              pip install -r "$service/requirements.txt"
+            fi
+
+            if [ -d "$service/tests" ]; then
+              echo "Running tests for $service"
+              pytest "$service/tests"
+            else
+              echo "No tests found for $service, skipping"
+            fi
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push authentication-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./authentication-service
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rokomari-authentication-service:latest
+
+      - name: Build and push recommendation-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./recommendation-service
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rokomari-recommendation-service:latest
+
+      - name: Build and push productsearch-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./productSearch-service
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rokomari-productsearch-service:latest
+
+      - name: Build and push interaction-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./interaction-service
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rokomari-interaction-service:latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rokomari-frontend:latest
+
+      - name: Deploy to Azure VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_IP }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          port: ${{ secrets.AZURE_VM_PORT }}
+          script: |
+            set -e
+            cd ${{ secrets.AZURE_VM_APP_PATH }}
+            git pull origin main
+            docker compose down
+            docker image prune -f
+            docker compose up -d --build

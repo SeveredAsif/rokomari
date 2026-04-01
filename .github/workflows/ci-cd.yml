@@ -87,7 +87,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.AZURE_VM_IP }}
-          username: asif_televerse
+          username: asif_rokomari
           key: ${{ secrets.AZURE_VM_KEY }}
           port: 22
           script: |

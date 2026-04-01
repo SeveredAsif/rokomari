@@ -122,6 +122,20 @@ services:
         condition: service_started
 
 
+  nginx:
+    build:
+      context: ./nginx
+    container_name: rokomari-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - authentication-service
+      - recommendation-service
+      - productsearch-service
+      - interaction-service
+
+
 volumes:
   postgres_data:
   redis_data:

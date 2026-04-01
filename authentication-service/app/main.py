@@ -19,7 +19,7 @@ except ImportError:
 
 load_dotenv()
 
-app = FastAPI(title="Authentication Service", version="0.2.0")
+app = FastAPI(title="Authentication Service", version="0.2.0", root_path="/auth")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 RECOMMENDATION_SERVICE_URL = os.getenv("RECOMMENDATION_SERVICE_URL", "http://localhost:8001")
 

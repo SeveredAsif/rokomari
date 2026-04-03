@@ -1,4 +1,6 @@
 import { useState } from "react";
+import "./App.css";
+import logo from "./assets/logo.png";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -6,8 +8,10 @@ export default function App() {
     const raw = localStorage.getItem("user");
     return raw ? JSON.parse(raw) : null;
   });
+
   const [mode, setMode] = useState("login");
   const [message, setMessage] = useState("");
+
   const [form, setForm] = useState({
     full_name: "",
     phone: "",
@@ -17,8 +21,8 @@ export default function App() {
 
   const isLogin = mode === "login";
 
-  const onChange = (event) => {
-    const { name, value } = event.target;
+  const onChange = (e) => {
+    const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -27,132 +31,166 @@ export default function App() {
     setUser(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    setMode("login");
-    setMessage("");
   };
 
-  const onSubmit = async (event) => {
-    event.preventDefault();
+  const onSubmit = async (e) => {
+    e.preventDefault();
     setMessage("");
-
-    const email = form.email.trim();
-    const password = form.password;
 
     try {
       if (isLogin) {
-        const loginResp = await fetch("/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password })
-        });
-
-        if (!loginResp.ok) {
-          const err = await loginResp.json().catch(() => ({ detail: "Login failed" }));
-          throw new Error(err.detail || "Login failed");
-        }
-
-        const loginData = await loginResp.json();
-        const newToken = loginData.access_token;
-
-        localStorage.setItem("token", newToken);
-        setToken(newToken);
-
-        const meResp = await fetch("/auth/me", {
-          headers: { Authorization: `Bearer ${newToken}` }
-        });
-
-        if (!meResp.ok) {
-          throw new Error("Could not load profile");
-        }
-
-        const me = await meResp.json();
-        localStorage.setItem("user", JSON.stringify(me));
-        setUser(me);
-      } else {
-        const registerResp = await fetch("/auth/register", {
+        const res = await fetch("/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email,
-            password,
-            full_name: form.full_name.trim(),
-            phone: form.phone.trim()
+            email: form.email,
+            password: form.password
           })
         });
 
-        if (!registerResp.ok) {
-          const err = await registerResp.json().catch(() => ({ detail: "Register failed" }));
-          throw new Error(err.detail || "Register failed");
-        }
+        if (!res.ok) throw new Error("Login failed");
+
+        const data = await res.json();
+        localStorage.setItem("token", data.access_token);
+        setToken(data.access_token);
+
+        const me = await fetch("/auth/me", {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`
+          }
+        });
+
+        const userData = await me.json();
+        localStorage.setItem("user", JSON.stringify(userData));
+        setUser(userData);
+      } else {
+        const res = await fetch("/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form)
+        });
+
+        if (!res.ok) throw new Error("Register failed");
 
         setMessage("Registration successful. Please login.");
         setMode("login");
       }
-    } catch (error) {
-      setMessage(error.message || "Request failed");
+    } catch (err) {
+      setMessage(err.message);
     }
   };
 
   if (token && user) {
     return (
       <div>
-        <p>Logged in{user.email ? ` as ${user.email}` : ""}</p>
-        <h1>Welcome to Rokomari</h1>
-        <button onClick={logout}>Logout</button>
+        <div className="header">
+          <div className="logo">
+              <img src={logo} alt="rokomari" />
+          </div>
+        </div>
+
+        <div className="page">
+          <div className="card">
+            <h2>Welcome {user.email}</h2>
+            <button className="primary-btn" onClick={logout}>
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <h2>{isLogin ? "Login" : "Register"}</h2>
-      <form onSubmit={onSubmit}>
-        {!isLogin ? (
-          <input
-            name="full_name"
-            placeholder="Full name"
-            required
-            value={form.full_name}
-            onChange={onChange}
-          />
-        ) : null}
+      <div className="header">
+        <div className="logo">
+            <img src={logo} alt="rokomari" />
+        </div>
+        <div className="nav">
+          <span>Become a Seller</span>
+          <span>Sign in</span>
+        </div>
+      </div>
 
-        {!isLogin ? (
-          <input
-            name="phone"
-            placeholder="Phone"
-            required
-            value={form.phone}
-            onChange={onChange}
-          />
-        ) : null}
+      <div className="page">
+        <div className="card">
+          <h2>{isLogin ? "Login" : "Create Account"}</h2>
+          <p className="subtitle">
+            {isLogin
+              ? "Enter your email and password to continue"
+              : "Fill in the details to create your account"}
+          </p>
+          <form onSubmit={onSubmit} className="form">
+            {!isLogin && (
+              <input
+                name="full_name"
+                placeholder="Full name"
+                value={form.full_name}
+                onChange={onChange}
+                required
+              />
+            )}
 
-        <input
-          name="email"
-          type="email"
-          placeholder="Email"
-          required
-          value={form.email}
-          onChange={onChange}
-        />
+            {!isLogin && (
+              <input
+                name="phone"
+                placeholder="Phone"
+                value={form.phone}
+                onChange={onChange}
+                required
+              />
+            )}
 
-        <input
-          name="password"
-          type="password"
-          placeholder="Password"
-          required
-          value={form.password}
-          onChange={onChange}
-        />
+            <input
+              name="email"
+              placeholder="Enter your email"
+              value={form.email}
+              onChange={onChange}
+              required
+            />
 
-        <button type="submit">{isLogin ? "Login" : "Register"}</button>
-      </form>
+            <input
+              name="password"
+              type="password"
+              placeholder="Enter your password"
+              value={form.password}
+              onChange={onChange}
+              required
+            />
 
-      <button onClick={() => setMode(isLogin ? "register" : "login")}>
-        Switch to {isLogin ? "Register" : "Login"}
-      </button>
+            <div className="form-row">
+              <label className="remember">
+                <input type="checkbox" />
+                <span>Remember me</span>  
+              </label>
 
-      <p>{message}</p>
+              <button type="button" className="link">
+                Forgot password?
+              </button>
+            </div>
+
+            <button className="primary-btn">
+              {isLogin ? "Login to Account" : "Create Account"}
+            </button>
+          </form>
+
+          {message && <p className="error">{message}</p>}
+
+          <p className="switch">
+            {isLogin ? "No account?" : "Already have account?"}
+            <button
+              className="link"
+              onClick={() => {
+                setMode(isLogin ? "register" : "login");
+                setMessage("");
+              }}
+            >
+              {isLogin ? " Register" : " Login"}
+            </button>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

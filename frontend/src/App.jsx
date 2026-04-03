@@ -137,35 +137,105 @@ export default function App() {
 
   // Logged-in view
   if (token && user) {
-    return (
-      <div>
-        <header className="header">
-          <div className="logo">
-            <img src={logo} alt="Rokomari" />
-          </div>
-        </header>
+  const mockProducts = [
+    {
+      id: 1,
+      title: "Atomic Habits",
+      author: "James Clear",
+      price: "৳450",
+      image: "/src/assets/books/atomic-habits.jpg",
+    },
+    {
+      id: 2,
+      title: "Deep Work",
+      author: "Cal Newport",
+      price: "৳390",
+      image: "/src/assets/books/deep-work.jpg",
+    },
+    {
+      id: 3,
+      title: "The Psychology of Money",
+      author: "Morgan Housel",
+      price: "৳520",
+      image: "/src/assets/books/psychology-money.jpg",
+    },
+    {
+      id: 4,
+      title: "Clean Code",
+      author: "Robert C. Martin",
+      price: "৳610",
+      image: "/src/assets/books/clean-code.jpg",
+    },
+    {
+      id: 5,
+      title: "Steal Like An Artist",
+      author: "Austin Kleon",
+      price: "৳350",
+      image: "/src/assets/books/steal-like-an-artist.jpg",
+    },
+    {
+      id: 6,
+      title: "Men are from Mars, Women are from Venus",
+      author: "John Gray",
+      price: "৳480",
+      image: "/src/assets/books/mars-venus.jpg",
+    },
+  ];
 
-        <main className="page">
-          <div className="card">
-            <h2>Welcome {user.full_name || user.email}</h2>
-            <p className="subtitle">
-              Logged in as <strong>{user.email}</strong>
-            </p>
+  return (
+    <div>
+      <header className="header home-header">
+        <div className="logo">
+          <img src={logo} alt="Rokomari" />
+        </div>
 
-            {message && (
-              <p className={`message ${messageType}`}>
-                {message}
-              </p>
-            )}
+        <div className="search-bar">
+          <input type="text" placeholder="Search by title, author or keyword" />
+          <button className="search-btn">Search</button>
+        </div>
 
-            <button className="primary-btn" onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </main>
+        <div className="nav">
+          <span>{user.full_name || user.email}</span>
+          <button className="link-btn" onClick={logout}>Logout</button>
+        </div>
+      </header>
+
+      <div className="category-bar">
+        <span>Books</span>
+        <span>Electronics</span>
+        <span>Stationery</span>
+        <span>Kids Zone</span>
+        <span>Islamic Books</span>
       </div>
-    );
-  }
+
+      <main className="home-page">
+        <section className="hero-banner">
+          <div>
+            <h2>Welcome back, {user.full_name || "Reader"}</h2>
+            <p>Browse books, search products, and discover recommendations.</p>
+          </div>
+        </section>
+
+        <section className="section-header">
+          <h3>Popular Books</h3>
+        </section>
+
+        <section className="product-grid">
+          {mockProducts.map((item) => (
+            <div className="product-card" key={item.id}>
+              <div className="product-thumb">
+                 <img src={item.image} alt={item.title} />
+              </div>
+              <h4>{item.title}</h4>
+              <p>{item.author}</p>
+              <strong className="product-price">{item.price}</strong>
+            </div>
+          ))}
+        </section>
+      </main>
+    </div>
+  );
+}
 
   // Auth form
   return (

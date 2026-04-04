@@ -265,6 +265,17 @@ h2 {
   margin-top: 30px;
 }
 
+.search-error {
+  margin: 0 0 16px;
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.search-btn:disabled {
+  background: #86efac;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1024px) {
   .product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -294,4 +305,80 @@ h2 {
   .hero-banner {
     padding: 20px;
   }
+}
+
+.api-section {
+  margin-top: 40px;
+}
+
+.search-error {
+  color: #dc2626;
+  margin-bottom: 16px;
+}
+
+.info-text {
+  color: #4b5563;
+  margin-bottom: 16px;
+}
+
+.meta-text {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.trending-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.trending-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.trending-query {
+  font-weight: 600;
+  color: #111827;
+}
+
+.trending-count {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.history-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.history-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.history-query {
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.history-time {
+  font-size: 12px;
+  color: #6b7280;
+  word-break: break-word;
 }

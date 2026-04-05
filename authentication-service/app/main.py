@@ -20,7 +20,7 @@ except ImportError:
 load_dotenv()
 
 app = FastAPI(title="Authentication Service", version="0.2.0", root_path="/auth")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 RECOMMENDATION_SERVICE_URL = os.getenv("RECOMMENDATION_SERVICE_URL", "http://localhost:8001")
 
 REQUIRED_TABLES = [
@@ -118,7 +118,7 @@ def health_check(db: Session = Depends(get_db)) -> dict[str, str]:
     return {"status": "ok", "service": "authentication-service"}
 
 
-@app.get("/auth/recommendation-demo")
+@app.get("/recommendation-demo")
 def recommendation_demo() -> dict:
     try:
         with httpx.Client(timeout=5.0) as client:
@@ -134,7 +134,7 @@ def recommendation_demo() -> dict:
         raise HTTPException(status_code=503, detail=f"recommendation-service unavailable: {exc}")
 
 
-@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
     existing_user = db.execute(
         text("SELECT user_id FROM users WHERE email = :email"),
@@ -169,7 +169,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRes
     )
 
 
-@app.post("/auth/login", response_model=TokenResponse)
+@app.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.execute(
         text(
@@ -189,7 +189,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     return TokenResponse(access_token=token)
 
 
-@app.get("/auth/me", response_model=UserResponse)
+@app.get("/me", response_model=UserResponse)
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> UserResponse:
     email = decode_access_token(token)
     if not email:

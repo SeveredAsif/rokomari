@@ -1,3 +1,11 @@
 .env
 /_pycache/
 *.pyc
+
+# Node
+node_modules/
+package-lock.json
+
+# frontend build
+dist/
+.vite/

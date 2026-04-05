@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import logo from "./assets/logo.png";
 
@@ -17,6 +17,64 @@ export default function App() {
     const raw = localStorage.getItem("user");
     return raw ? JSON.parse(raw) : null;
   });
+
+    const [searchQuery, setSearchQuery] = useState("");
+  const [products, setProducts] = useState([
+    {
+      id: 1,
+      title: "Atomic Habits",
+      author: "James Clear",
+      price: "৳450",
+      image: "/src/assets/books/atomic-habits.jpg",
+    },
+    {
+      id: 2,
+      title: "Deep Work",
+      author: "Cal Newport",
+      price: "৳390",
+      image: "/src/assets/books/deep-work.jpg",
+    },
+    {
+      id: 3,
+      title: "The Psychology of Money",
+      author: "Morgan Housel",
+      price: "৳520",
+      image: "/src/assets/books/psychology-money.jpg",
+    },
+    {
+      id: 4,
+      title: "Clean Code",
+      author: "Robert C. Martin",
+      price: "৳610",
+      image: "/src/assets/books/clean-code.jpg",
+    },
+    {
+      id: 5,
+      title: "Steal Like An Artist",
+      author: "Austin Kleon",
+      price: "৳350",
+      image: "/src/assets/books/steal-like-an-artist.jpg",
+    },
+    {
+      id: 6,
+      title: "Men are from Mars, Women are from Venus",
+      author: "John Gray",
+      price: "৳480",
+      image: "/src/assets/books/mars-venus.jpg",
+    },
+  ]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [sectionTitle, setSectionTitle] = useState("Popular Books");
+  const [apiPopularProducts, setApiPopularProducts] = useState([]);
+  const [popularError, setPopularError] = useState("");
+  const [isLoadingPopular, setIsLoadingPopular] = useState(false);
+  const [trendingSearches, setTrendingSearches] = useState([]);
+  const [trendingError, setTrendingError] = useState("");
+  const [isLoadingTrending, setIsLoadingTrending] = useState(false);
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [historyError, setHistoryError] = useState("");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);  
 
   const [mode, setMode] = useState("login");
   const [message, setMessage] = useState("");
@@ -61,6 +119,149 @@ export default function App() {
     clearMessage();
     setMode("login");
   };
+
+  const fetchPopularRecommendations = async () => {
+  setIsLoadingPopular(true);
+  setPopularError("");
+
+    try {
+      const response = await fetch("/recommendation/recommendations/popular?limit=6");
+
+      if (!response.ok) {
+        throw new Error(await getErrorMessage(response, "Failed to load popular recommendations"));
+      }
+
+      const data = await response.json();
+
+      const mappedPopular = (data.results || []).map((item) => ({
+        id: item.id,
+        title: item.name || "Unnamed Product",
+        author: item.author || "Unknown Author",
+        category: item.category || "Unknown Category",
+        price: item.price != null ? `৳${item.price}` : "N/A",
+        image: item.image_url || "/src/assets/books/atomic-habits.jpg",
+        visitCount: item.visit_count ?? 0,
+      }));
+
+      setApiPopularProducts(mappedPopular);
+    } catch (error) {
+      setPopularError(error.message || "Failed to load popular recommendations");
+    } finally {
+      setIsLoadingPopular(false);
+    }
+  };
+
+  const fetchTrendingSearches = async () => {
+    setIsLoadingTrending(true);
+    setTrendingError("");
+
+    try {
+      const response = await fetch("/productsearch/search/trending?limit=8");
+
+      if (!response.ok) {
+        throw new Error(await getErrorMessage(response, "Failed to load trending searches"));
+      }
+
+      const data = await response.json();
+      setTrendingSearches(data.trending_searches || []);
+    } catch (error) {
+      setTrendingError(error.message || "Failed to load trending searches");
+    } finally {
+      setIsLoadingTrending(false);
+    }
+  };  
+
+  const fetchSearchHistory = async () => {
+    if (!token) return;
+
+    setIsLoadingHistory(true);
+    setHistoryError("");
+
+    try {
+      const response = await fetch("/productsearch/search/history?limit=8", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await getErrorMessage(response, "Failed to load search history"));
+      }
+
+      const data = await response.json();
+      setSearchHistory(data.searches || []);
+    } catch (error) {
+      setHistoryError(error.message || "Failed to load search history");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleSearch = async (e) => {
+  e.preventDefault();
+
+  const q = searchQuery.trim();
+  if (!q) return;
+
+  setIsSearching(true);
+  setSearchError("");
+
+  try {
+    const storedToken = localStorage.getItem("token");
+
+    const response = await fetch(
+      `/productsearch/search?q=${encodeURIComponent(q)}&limit=12&threshold=0.1`,
+      {
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await getErrorMessage(response, "Search failed");
+
+      if (response.status === 401) {
+        logout();
+        throw new Error("Session expired. Please login again.");
+      } 
+
+      throw new Error(errorText);
+    }
+
+    const data = await response.json();
+
+    const mappedProducts = (data.results || []).map((item) => ({
+      id: item.id,
+      title: item.name,
+      author: item.author,
+      price: `৳${item.price}`,
+      image: item.image_url || "/src/assets/books/atomic-habits.jpg",
+    }));
+
+    setProducts(mappedProducts);
+    setSectionTitle(`Search Results for "${q}"`);
+
+    if (mappedProducts.length === 0) {
+      setSearchError("No products found for this search.");
+      }
+    } catch (error) {
+      setSearchError(error.message || "Search failed");
+    } finally {
+      setIsSearching(false);
+    }
+
+    fetchSearchHistory();
+    fetchTrendingSearches();
+  };
+
+  useEffect(() => {
+    if (token && user) {
+      fetchPopularRecommendations();
+      fetchTrendingSearches();
+      fetchSearchHistory();
+    }
+  }, [token, user]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -189,10 +390,17 @@ export default function App() {
           <img src={logo} alt="Rokomari" />
         </div>
 
-        <div className="search-bar">
-          <input type="text" placeholder="Search by title, author or keyword" />
-          <button className="search-btn">Search</button>
-        </div>
+        <form className="search-bar" onSubmit={handleSearch}>
+          <input
+            type="text"
+            placeholder="Search by title, author or keyword"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <button className="search-btn" type="submit" disabled={isSearching}>
+            {isSearching ? "Searching..." : "Search"}
+          </button>
+        </form>
 
         <div className="nav">
           <span>{user.full_name || user.email}</span>
@@ -217,11 +425,13 @@ export default function App() {
         </section>
 
         <section className="section-header">
-          <h3>Popular Books</h3>
+          <h3>{sectionTitle}</h3>
         </section>
 
+        {searchError && <p className="search-error">{searchError}</p>}
+
         <section className="product-grid">
-          {mockProducts.map((item) => (
+          {products.map((item) => (
             <div className="product-card" key={item.id}>
               <div className="product-thumb">
                  <img src={item.image} alt={item.title} />
@@ -232,6 +442,85 @@ export default function App() {
             </div>
           ))}
         </section>
+
+        <section className="api-section">
+          <div className="section-header">
+            <h3>Popular Recommendations (API)</h3>
+          </div>
+
+          {isLoadingPopular && <p className="info-text">Loading API recommendations...</p>}
+          {popularError && <p className="search-error">{popularError}</p>}
+
+          {!isLoadingPopular && !popularError && (
+            <section className="product-grid">
+              {apiPopularProducts.length > 0 ? (
+                apiPopularProducts.map((item) => (
+                  <div className="product-card" key={`api-${item.id}`}>
+                    <div className="product-thumb">
+                      <img src={item.image} alt={item.title} />
+                    </div>
+                    <h4>{item.title}</h4>
+                    <p>{item.author}</p>
+                    <strong className="product-price">{item.price}</strong>
+                    <p className="meta-text">{item.category}</p>
+                    <p className="meta-text">Visits: {item.visitCount}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="info-text">No API recommendations found.</p>
+              )}
+            </section>
+          )}
+        </section>
+
+        <section className="api-section">
+          <div className="section-header">
+            <h3>Trending Searches</h3>
+          </div>
+
+          {isLoadingTrending && <p className="info-text">Loading trending searches...</p>}
+          {trendingError && <p className="search-error">{trendingError}</p>}
+
+          {!isLoadingTrending && !trendingError && (
+            <div className="trending-list">
+              {trendingSearches.length > 0 ? (
+                trendingSearches.map((item, index) => (
+                  <div className="trending-chip" key={`${item.query}-${index}`}>
+                    <span className="trending-query">{item.query}</span>
+                    <span className="trending-count">{item.search_count}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="info-text">No trending searches found.</p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="api-section">
+          <div className="section-header">
+            <h3>Your Search History</h3>
+          </div>
+
+          {isLoadingHistory && <p className="info-text">Loading search history...</p>}
+          {historyError && <p className="search-error">{historyError}</p>}
+
+          {!isLoadingHistory && !historyError && (
+            <div className="history-list">
+              {searchHistory.length > 0 ? (
+                searchHistory.map((item, index) => (
+                  <div className="history-card" key={`${item.query}-${index}`}>
+                    <div className="history-query">{item.query}</div>
+                    <div className="history-time">{item.timestamp}</div>
+                  </div>
+                ))
+              ) : (
+                <p className="info-text">No search history found.</p>
+              )}
+            </div>
+          )}
+        </section>                
+
       </main>
     </div>
   );

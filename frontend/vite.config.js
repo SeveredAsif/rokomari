@@ -1,11 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const AUTH_TARGET =
-  process.env.VITE_AUTH_TARGET || "http://localhost:8000";
-
-const PRODUCTSEARCH_TARGET =
-  process.env.VITE_PRODUCTSEARCH_TARGET || "http://localhost:8002";
+// In docker-compose, the frontend runs inside a container, so `localhost` would
+// point back to the frontend container itself. Proxying to nginx keeps routing
+// consistent with production.
+const BACKEND_TARGET = process.env.VITE_BACKEND_TARGET || "http://nginx";
 
 export default defineConfig({
   plugins: [react()],
@@ -14,18 +13,20 @@ export default defineConfig({
     port: 3000,
     proxy: {
       "/auth": {
-        target: AUTH_TARGET,
+        target: BACKEND_TARGET,
         changeOrigin: true,
       },
       "/productsearch": {
-        target: PRODUCTSEARCH_TARGET,
+        target: BACKEND_TARGET,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/productsearch/, ""),
       },
       "/recommendation": {
-      target: "http://localhost:8001",
-      changeOrigin: true,
-      rewrite: (path) => path.replace(/^\/recommendation/, ""),
+        target: BACKEND_TARGET,
+        changeOrigin: true,
+      },
+      "/interaction": {
+        target: BACKEND_TARGET,
+        changeOrigin: true,
       },
     },
   },

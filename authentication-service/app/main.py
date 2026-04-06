@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import httpx
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 try:
@@ -141,24 +142,42 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserRes
         {"email": payload.email},
     ).fetchone()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-    inserted = db.execute(
-        text(
-            """
-            INSERT INTO users (full_name, email, phone, password_hash)
-            VALUES (:full_name, :email, :phone, :password_hash)
-            RETURNING user_id, full_name, email, phone, created_at
-            """
-        ),
-        {
-            "full_name": payload.full_name,
-            "email": payload.email,
-            "phone": payload.phone,
-            "password_hash": hash_password(payload.password),
-        },
+    existing_phone = db.execute(
+        text("SELECT user_id FROM users WHERE phone = :phone"),
+        {"phone": payload.phone},
     ).fetchone()
-    db.commit()
+    if existing_phone:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already registered")
+
+    try:
+        inserted = db.execute(
+            text(
+                """
+                INSERT INTO users (full_name, email, phone, password_hash)
+                VALUES (:full_name, :email, :phone, :password_hash)
+                RETURNING user_id, full_name, email, phone, created_at
+                """
+            ),
+            {
+                "full_name": payload.full_name,
+                "email": payload.email,
+                "phone": payload.phone,
+                "password_hash": hash_password(payload.password),
+            },
+        ).fetchone()
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        diag = getattr(getattr(exc, "orig", None), "diag", None)
+        constraint = getattr(diag, "constraint_name", "") or ""
+        message = str(exc).lower()
+        if "users_phone_key" in message or "phone" in constraint:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already registered")
+        if "users_email_key" in message or "email" in constraint:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
 
     return UserResponse(
         user_id=inserted.user_id,

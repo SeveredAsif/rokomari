@@ -115,6 +115,8 @@ services:
       context: ./frontend
     container_name: rokomari-frontend
     restart: unless-stopped
+    environment:
+      VITE_BACKEND_TARGET: http://nginx
     ports:
       - "3000:3000"
     depends_on:

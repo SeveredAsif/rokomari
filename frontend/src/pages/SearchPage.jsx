@@ -10,6 +10,8 @@ const DEFAULT_FILTERS = {
   brand: "",
   author: "",
   publisher: "",
+  discountMin: "",
+  discountMax: "",
   sortBy: "relevance",
   sortOrder: "desc",
 };
@@ -119,19 +121,14 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
     performSearch(q, filters);
   };
 
-  const handleApplyFilters = (e) => {
-    e.preventDefault();
-    const q = inputQuery.trim() || activeQuery.trim();
-    if (!q) return;
-    performSearch(q, filters);
-  };
+  useEffect(() => {
+    if (!activeQuery?.trim()) return;
+    const timeout = setTimeout(() => {
+      performSearch(activeQuery, filters);
+    }, 250);
 
-  const handleResetFilters = () => {
-    setFilters(DEFAULT_FILTERS);
-    const q = inputQuery.trim() || activeQuery.trim();
-    if (!q) return;
-    performSearch(q, DEFAULT_FILTERS);
-  };
+    return () => clearTimeout(timeout);
+  }, [filters, activeQuery]);
 
   const minHint = filterOptions.price_range?.min;
   const maxHint = filterOptions.price_range?.max;
@@ -149,91 +146,13 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
         onGoHome={onBackToHome}
       />
 
-      <main className="home-page">
-        <section className="hero-banner">
-          <div>
-            <h2>Search Results</h2>
-            <p>Showing results for "{activeQuery}"</p>
-            {searchMeta && (
-              <p className="meta-text">
-                Source: {searchMeta.source} | Results: {searchMeta.count} | Sort: {searchMeta.sort?.by} ({searchMeta.sort?.order})
-              </p>
-            )}
-            <button className="link-btn" onClick={onBackToHome}>Back to Home</button>
-          </div>
-        </section>
-
-        <section className="filter-panel">
-          <form onSubmit={handleApplyFilters}>
-            <div className="filter-grid">
-              <label>
-                Min Price
-                <input
-                  type="number"
-                  min="0"
-                  value={filters.minPrice}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, minPrice: e.target.value }))}
-                  placeholder={minHint != null ? String(Math.floor(minHint)) : "0"}
-                />
-              </label>
-
-              <label>
-                Max Price
-                <input
-                  type="number"
-                  min="0"
-                  value={filters.maxPrice}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, maxPrice: e.target.value }))}
-                  placeholder={maxHint != null ? String(Math.ceil(maxHint)) : "1000"}
-                />
-              </label>
-
-              <label>
-                Product Type
-                <select
-                  value={filters.productType}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, productType: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {(filterOptions.product_types || []).map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Brand
-                <input
-                  type="text"
-                  list="brand-options"
-                  value={filters.brand}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, brand: e.target.value }))}
-                  placeholder="e.g. Brand 2"
-                />
-              </label>
-
-              <label>
-                Author
-                <input
-                  type="text"
-                  list="author-options"
-                  value={filters.author}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, author: e.target.value }))}
-                  placeholder="Filter by author"
-                />
-              </label>
-
-              <label>
-                Publisher
-                <input
-                  type="text"
-                  list="publisher-options"
-                  value={filters.publisher}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, publisher: e.target.value }))}
-                  placeholder="Filter by publisher"
-                />
-              </label>
-
+      <div className="search-page-layout">
+        {/* Left Sidebar - Filters */}
+        <aside className="filter-sidebar">
+          <h3>Search Controls</h3>
+          <div className="filter-section">
+            <h4>Sort</h4>
+            <div className="filter-fields">
               <label>
                 Sort By
                 <select
@@ -241,8 +160,12 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
                   onChange={(e) => setFilters((prev) => ({ ...prev, sortBy: e.target.value }))}
                 >
                   <option value="relevance">Relevance</option>
-                  <option value="price">Price</option>
-                  <option value="name">Name</option>
+                  <option value="best_seller">Best Seller</option>
+                  <option value="new_released">New Released</option>
+                  <option value="price_low_high">Price - Low to High</option>
+                  <option value="price_high_low">Price - High to Low</option>
+                  <option value="discount_low_high">Discount - Low to High</option>
+                  <option value="discount_high_low">Discount - High to Low</option>
                 </select>
               </label>
 
@@ -257,16 +180,228 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
                 </select>
               </label>
             </div>
+          </div>
 
-            <div className="filter-actions">
-              <button className="search-btn" type="submit" disabled={isSearching}>
-                {isSearching ? "Applying..." : "Apply Filters"}
-              </button>
-              <button className="link-btn" type="button" onClick={handleResetFilters}>
-                Reset Filters
-              </button>
+          <div className="filter-section">
+            <h4>Filters</h4>
+            <div className="filter-fields">
+
+              <label>
+                Price Range: ৳{filters.minPrice || minHint || 0} - ৳{filters.maxPrice || maxHint || 10000}
+              </label>
+              <div className="range-inputs">
+                <input
+                  type="range"
+                  min={minHint || 0}
+                  max={maxHint || 10000}
+                  value={filters.minPrice || minHint || 0}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, minPrice: e.target.value }))}
+                  className="range-slider"
+                />
+                <input
+                  type="range"
+                  min={minHint || 0}
+                  max={maxHint || 10000}
+                  value={filters.maxPrice || maxHint || 10000}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, maxPrice: e.target.value }))}
+                  className="range-slider"
+                />
+              </div>
+
+              <label>
+                Discount Range: {filters.discountMin || 0}% - {filters.discountMax || 100}%
+              </label>
+              <div className="range-inputs">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={filters.discountMin || 0}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, discountMin: e.target.value }))}
+                  className="range-slider"
+                />
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={filters.discountMax || 100}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, discountMax: e.target.value }))}
+                  className="range-slider"
+                />
+              </div>
+
+              <fieldset className="filter-checkboxes">
+                <legend>Type</legend>
+                <input
+                  type="text"
+                  placeholder="Type product type..."
+                  list="type-options"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const value = e.target.value.trim();
+                      if (value && !filters.productType.split(",").includes(value)) {
+                        const types = filters.productType.split(",").filter(t => t);
+                        setFilters((prev) => ({ ...prev, productType: [...types, value].join(",") }));
+                        e.target.value = "";
+                      }
+                    }
+                  }}
+                />
+                <div className="filter-choice-row">
+                  {(filterOptions.product_types || []).slice(0, 8).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      className={filters.productType.split(",").includes(type) ? "filter-chip selected" : "filter-chip"}
+                      onClick={() => {
+                        const types = filters.productType.split(",").filter(t => t);
+                        if (types.includes(type)) {
+                          setFilters((prev) => ({ ...prev, productType: types.filter(t => t !== type).join(",") }));
+                        } else {
+                          setFilters((prev) => ({ ...prev, productType: [...types, type].join(",") }));
+                        }
+                      }}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <div className="filter-tags">
+                  {filters.productType.split(",").filter(t => t).map((type) => (
+                    <span key={type} className="filter-tag">
+                      {type}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const types = filters.productType.split(",").filter(t => t && t !== type);
+                          setFilters((prev) => ({ ...prev, productType: types.join(",") }));
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset className="filter-checkboxes">
+                <legend>Authors</legend>
+                <input
+                  type="text"
+                  placeholder="Type author name..."
+                  list="author-options"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const value = e.target.value.trim();
+                      if (value && !filters.author.split(",").includes(value)) {
+                        const authors = filters.author.split(",").filter(a => a);
+                        setFilters((prev) => ({ ...prev, author: [...authors, value].join(",") }));
+                        e.target.value = "";
+                      }
+                    }
+                  }}
+                />
+                <div className="filter-choice-row">
+                  {(filterOptions.authors || []).slice(0, 8).map((author) => (
+                    <button
+                      key={author}
+                      type="button"
+                      className={filters.author.split(",").includes(author) ? "filter-chip selected" : "filter-chip"}
+                      onClick={() => {
+                        const authors = filters.author.split(",").filter(a => a);
+                        if (authors.includes(author)) {
+                          setFilters((prev) => ({ ...prev, author: authors.filter(a => a !== author).join(",") }));
+                        } else {
+                          setFilters((prev) => ({ ...prev, author: [...authors, author].join(",") }));
+                        }
+                      }}
+                    >
+                      {author}
+                    </button>
+                  ))}
+                </div>
+                <div className="filter-tags">
+                  {filters.author.split(",").filter(a => a).map((author) => (
+                    <span key={author} className="filter-tag">
+                      {author}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const authors = filters.author.split(",").filter(a => a && a !== author);
+                          setFilters((prev) => ({ ...prev, author: authors.join(",") }));
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset className="filter-checkboxes">
+                <legend>Publishers</legend>
+                <input
+                  type="text"
+                  placeholder="Type publisher name..."
+                  list="publisher-options"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const value = e.target.value.trim();
+                      if (value && !filters.publisher.split(",").includes(value)) {
+                        const publishers = filters.publisher.split(",").filter(p => p);
+                        setFilters((prev) => ({ ...prev, publisher: [...publishers, value].join(",") }));
+                        e.target.value = "";
+                      }
+                    }
+                  }}
+                />
+                <div className="filter-choice-row">
+                  {(filterOptions.publishers || []).slice(0, 8).map((publisher) => (
+                    <button
+                      key={publisher}
+                      type="button"
+                      className={filters.publisher.split(",").includes(publisher) ? "filter-chip selected" : "filter-chip"}
+                      onClick={() => {
+                        const publishers = filters.publisher.split(",").filter(p => p);
+                        if (publishers.includes(publisher)) {
+                          setFilters((prev) => ({ ...prev, publisher: publishers.filter(p => p !== publisher).join(",") }));
+                        } else {
+                          setFilters((prev) => ({ ...prev, publisher: [...publishers, publisher].join(",") }));
+                        }
+                      }}
+                    >
+                      {publisher}
+                    </button>
+                  ))}
+                </div>
+                <div className="filter-tags">
+                  {filters.publisher.split(",").filter(p => p).map((publisher) => (
+                    <span key={publisher} className="filter-tag">
+                      {publisher}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const publishers = filters.publisher.split(",").filter(p => p && p !== publisher);
+                          setFilters((prev) => ({ ...prev, publisher: publishers.join(",") }));
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </fieldset>
             </div>
-          </form>
+          </div>
+
+          <datalist id="type-options">
+            {(filterOptions.product_types || []).map((type) => (
+              <option key={type} value={type} />
+            ))}
+          </datalist>
 
           <datalist id="author-options">
             {(filterOptions.authors || []).map((name) => (
@@ -285,10 +420,26 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
               <option key={name} value={name} />
             ))}
           </datalist>
-        </section>
+        </aside>
 
-        <ProductGrid products={products} sectionTitle={`Search Results for "${activeQuery}"`} searchError={searchError} onBookClick={onBookClick} />
-      </main>
+        {/* Right Content - Results */}
+        <main className="search-results-main">
+          <section className="hero-banner">
+            <div>
+              <h2>Search Results</h2>
+              <p>Showing results for "{activeQuery}"</p>
+              {searchMeta && (
+                <p className="meta-text">
+                  Results: {searchMeta.count} | Source: {searchMeta.source} | Sort: {searchMeta.sort?.by} ({searchMeta.sort?.order})
+                </p>
+              )}
+              <button className="link-btn" onClick={onBackToHome}>Back to Home</button>
+            </div>
+          </section>
+
+          <ProductGrid products={products} sectionTitle={`Search Results for "${activeQuery}"`} searchError={searchError} onBookClick={onBookClick} />
+        </main>
+      </div>
     </div>
   );
 }

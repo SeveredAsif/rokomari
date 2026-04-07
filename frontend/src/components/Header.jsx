@@ -1,10 +1,24 @@
 import logo from "../assets/logo.png";
 
-export default function Header({ user, searchQuery, setSearchQuery, onSearch, isSearching, onLogout, onRequestLogin }) {
+export default function Header({
+  user,
+  searchQuery,
+  setSearchQuery,
+  onSearch,
+  isSearching,
+  onLogout,
+  onRequestLogin,
+  onGoHome, // 🔥 added
+}) {
   return (
     <>
       <header className="header home-header">
-        <div className="logo">
+        {/* 🔥 LOGO CLICK → HOME */}
+        <div
+          className="logo"
+          onClick={onGoHome}
+          style={{ cursor: "pointer" }}
+        >
           <img src={logo} alt="Rokomari" />
         </div>
 
@@ -24,10 +38,14 @@ export default function Header({ user, searchQuery, setSearchQuery, onSearch, is
           {user ? (
             <>
               <span>{user.full_name || user.email}</span>
-              <button className="link-btn" onClick={onLogout}>Logout</button>
+              <button className="link-btn" onClick={onLogout}>
+                Logout
+              </button>
             </>
           ) : (
-            <button className="primary-btn" onClick={onRequestLogin}>Login</button>
+            <button className="primary-btn" onClick={onRequestLogin}>
+              Login
+            </button>
           )}
         </div>
       </header>

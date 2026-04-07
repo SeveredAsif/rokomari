@@ -41,9 +41,11 @@ export default function App() {
   if (page === "search") {
     return (
       <SearchPage
+        user={user}
         searchQuery={searchQuery}
         token={token}
         onLogout={logout}
+        onRequestLogin={handleLoginRequest}
         onBackToHome={handleBackToHome}
       />
     );

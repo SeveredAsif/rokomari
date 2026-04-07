@@ -3,10 +3,11 @@ import Header from "../components/Header";
 import ProductGrid from "../components/ProductGrid";
 import { searchProducts } from "../services/api";
 
-export default function SearchPage({ searchQuery, token, onLogout, onBackToHome }) {
+export default function SearchPage({ user, searchQuery, token, onLogout, onRequestLogin, onBackToHome }) {
   const [products, setProducts] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [inputQuery, setInputQuery] = useState(searchQuery);
 
   useEffect(() => {
     if (searchQuery) {
@@ -36,19 +37,24 @@ export default function SearchPage({ searchQuery, token, onLogout, onBackToHome 
     }
   };
 
+  const handleNewSearch = (e) => {
+    e.preventDefault();
+    const q = inputQuery.trim();
+    if (!q) return;
+    performSearch(q);
+  };
+
   return (
     <div>
       <Header
-        user={null} // Assuming no user-specific in search header
-        searchQuery={searchQuery}
-        setSearchQuery={() => {}}
-        onSearch={(e) => {
-            e.preventDefault();
-            performSearch(searchQuery); // 🔥 FIX
-        }}
+        user={user}
+        searchQuery={inputQuery}
+        setSearchQuery={setInputQuery}
+        onSearch={handleNewSearch}
         isSearching={isSearching}
         onLogout={onLogout}
-        onRequestLogin={() => {}} // Not needed here
+        onRequestLogin={onRequestLogin}
+        onGoHome={onBackToHome}
       />
 
       <main className="home-page">

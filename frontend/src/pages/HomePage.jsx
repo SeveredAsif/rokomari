@@ -124,6 +124,7 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
         isSearching={isSearching}
         onLogout={onLogout}
         onRequestLogin={onRequestLogin}
+        onGoHome={() => {}} // No-op on home page
       />
 
       <main className="home-page">

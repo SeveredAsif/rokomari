@@ -1,6 +1,6 @@
 import logo from "../assets/logo.png";
 
-export default function Header({ user, searchQuery, setSearchQuery, onSearch, isSearching, onLogout }) {
+export default function Header({ user, searchQuery, setSearchQuery, onSearch, isSearching, onLogout, onRequestLogin }) {
   return (
     <>
       <header className="header home-header">
@@ -21,8 +21,14 @@ export default function Header({ user, searchQuery, setSearchQuery, onSearch, is
         </form>
 
         <div className="nav">
-          <span>{user.full_name || user.email}</span>
-          <button className="link-btn" onClick={onLogout}>Logout</button>
+          {user ? (
+            <>
+              <span>{user.full_name || user.email}</span>
+              <button className="link-btn" onClick={onLogout}>Logout</button>
+            </>
+          ) : (
+            <button className="primary-btn" onClick={onRequestLogin}>Login</button>
+          )}
         </div>
       </header>
 

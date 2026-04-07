@@ -20,7 +20,7 @@ const DEFAULT_PRODUCTS = [
   { id: 6, title: "Men are from Mars, Women are from Venus", author: "John Gray", price: "৳480", image: "/src/assets/books/mars-venus.jpg" },
 ];
 
-export default function HomePage({ user, token, onLogout }) {
+export default function HomePage({ user, token, onLogout, onRequestLogin, onSearch }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [sectionTitle, setSectionTitle] = useState("Popular Books");
@@ -94,29 +94,7 @@ export default function HomePage({ user, token, onLogout }) {
     const q = searchQuery.trim();
     if (!q) return;
 
-    setIsSearching(true);
-    setSearchError("");
-    try {
-      const data = await searchProducts(q, token);
-      const mapped = (data.results || []).map((item) => ({
-        id: item.id,
-        title: item.name,
-        author: item.author,
-        price: `৳${item.price}`,
-        image: item.image_url || "/src/assets/books/atomic-habits.jpg",
-      }));
-      setProducts(mapped);
-      setSectionTitle(`Search Results for "${q}"`);
-      if (mapped.length === 0) setSearchError("No products found for this search.");
-    } catch (err) {
-      if (err.status === 401) onLogout();
-      setSearchError(err.message);
-    } finally {
-      setIsSearching(false);
-    }
-
-    loadHistory();
-    loadTrending();
+    onSearch(q); // Navigate to search page
   };
 
   useEffect(() => {
@@ -124,6 +102,17 @@ export default function HomePage({ user, token, onLogout }) {
     loadTrending();
     loadHistory();
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setSearchHistory([]);
+    }
+  }, [token]);
+
+  const heroTitle = user ? `Welcome back, ${user.full_name || "Reader"}` : "Welcome to Rokomari";
+  const heroSubtext = user
+    ? "Browse books, search products, and enjoy your personalized homepage."
+    : "Browse popular books, trending searches, and login to personalize your recommendations.";
 
   return (
     <div>
@@ -134,21 +123,50 @@ export default function HomePage({ user, token, onLogout }) {
         onSearch={handleSearch}
         isSearching={isSearching}
         onLogout={onLogout}
+        onRequestLogin={onRequestLogin}
       />
 
       <main className="home-page">
         <section className="hero-banner">
           <div>
-            <h2>Welcome back, {user.full_name || "Reader"}</h2>
-            <p>Browse books, search products, and discover recommendations.</p>
+            <h2>{heroTitle}</h2>
+            <p>{heroSubtext}</p>
+            {!user && (
+              <button className="primary-btn" type="button" onClick={onRequestLogin}>
+                Login to personalize
+              </button>
+            )}
           </div>
         </section>
 
-        <ProductGrid products={products} sectionTitle={sectionTitle} searchError={searchError} />
-        <PopularSection products={popularProducts} isLoading={isLoadingPopular} error={popularError} />
-        <TrendingSection searches={trendingSearches} isLoading={isLoadingTrending} error={trendingError} />
-        <HistorySection searches={searchHistory} isLoading={isLoadingHistory} error={historyError} />
-      </main>
+        <ProductGrid
+            products={products}
+            sectionTitle={sectionTitle}
+            searchError={searchError}
+        />
+
+        {/* 🔥 ONLY show these when NOT searching */}
+        {sectionTitle === "Popular Books" && (
+          <>
+            <PopularSection
+              products={popularProducts}
+              isLoading={isLoadingPopular}
+              error={popularError}
+            />
+            <TrendingSection
+              searches={trendingSearches}
+              isLoading={isLoadingTrending}
+              error={trendingError}
+            />
+            <HistorySection
+              searches={searchHistory}
+              isLoading={isLoadingHistory}
+              error={historyError}
+              isLoggedIn={!!user}
+            />
+          </>
+        )}
+        </main>
     </div>
   );
 }

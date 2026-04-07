@@ -56,9 +56,12 @@ export async function fetchSearchHistory(token) {
 }
 
 export async function searchProducts(query, token) {
+  const headers = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
   const resp = await fetch(
     `/productsearch/search?q=${encodeURIComponent(query)}&limit=12&threshold=0.1`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers }
   );
   if (!resp.ok) {
     if (resp.status === 401) throw Object.assign(new Error("Session expired. Please login again."), { status: 401 });

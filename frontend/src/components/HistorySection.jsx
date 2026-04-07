@@ -1,4 +1,4 @@
-export default function HistorySection({ searches, isLoading, error }) {
+export default function HistorySection({ searches, isLoading, error, isLoggedIn }) {
   return (
     <section className="api-section">
       <div className="section-header">
@@ -10,15 +10,19 @@ export default function HistorySection({ searches, isLoading, error }) {
 
       {!isLoading && !error && (
         <div className="history-list">
-          {searches.length > 0 ? (
-            searches.map((item, index) => (
-              <div className="history-card" key={`${item.query}-${index}`}>
-                <div className="history-query">{item.query}</div>
-                <div className="history-time">{item.timestamp}</div>
-              </div>
-            ))
+          {isLoggedIn ? (
+            searches.length > 0 ? (
+              searches.map((item, index) => (
+                <div className="history-card" key={`${item.query}-${index}`}>
+                  <div className="history-query">{item.query}</div>
+                  <div className="history-time">{item.timestamp}</div>
+                </div>
+              ))
+            ) : (
+              <p className="info-text">No search history found.</p>
+            )
           ) : (
-            <p className="info-text">No search history found.</p>
+            <p className="info-text">Login to view your personalized search history.</p>
           )}
         </div>
       )}

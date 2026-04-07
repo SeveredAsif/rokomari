@@ -2,7 +2,7 @@ import { useState } from "react";
 import logo from "../assets/logo.png";
 import { loginUser, registerUser, fetchMe } from "../services/api";
 
-export default function AuthPage({ onLogin }) {
+export default function AuthPage({ onLogin, onClose }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ full_name: "", phone: "", email: "", password: "" });
   const [message, setMessage] = useState("");
@@ -37,6 +37,7 @@ export default function AuthPage({ onLogin }) {
         onLogin(access_token, me);
         setMessage("Login successful");
         setMessageType("success");
+        if (onClose) onClose();
       } else {
         await registerUser({
           email: form.email.trim(),
@@ -64,7 +65,11 @@ export default function AuthPage({ onLogin }) {
           <img src={logo} alt="Rokomari" />
         </div>
         <div className="nav">
-          <span>Become a Seller</span>
+          {onClose ? (
+            <button className="link-btn" type="button" onClick={onClose}>Close</button>
+          ) : (
+            <span>Become a Seller</span>
+          )}
           <span>Sign in</span>
         </div>
       </header>

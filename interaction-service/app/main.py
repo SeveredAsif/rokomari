@@ -30,6 +30,11 @@ SEARCH_COOLDOWN_MINUTES = int(os.getenv("SEARCH_COOLDOWN_MINUTES", "2"))
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+# Import analytics router
+from .analytics import router as analytics_router
+app.include_router(analytics_router, prefix="/stats", tags=["Analytics"])
+
+
 def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
     """
     Verifies a user's JWT token and returns the decoded payload.

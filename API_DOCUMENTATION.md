@@ -288,6 +288,84 @@ Request body:
 
 Legacy alias (still supported): `POST /interactions/order`
 
+### Analytics Endpoints (NEW)
+
+All analytics endpoints are read-only and return JSON statistics.
+
+#### GET /stats
+Overall interaction statistics across all users.
+
+Response:
+```json
+{
+  "total_product_visits": 3017,
+  "total_unique_visitors": 3,
+  "total_searches": 2019,
+  "total_unique_searchers": 3,
+  "avg_visits_per_user": 1005.67,
+  "avg_searches_per_user": 673.0,
+  "timestamp": "2026-04-07T10:58:33.920533"
+}
+```
+
+#### GET /stats/user/{user_id}
+Get interaction statistics for a specific user.
+
+Parameters:
+- `user_id` (path): User ID to analyze
+
+Response includes: total visits, unique products, total searches, unique keywords, last visit/search timestamps.
+
+#### GET /stats/products/most-visited?limit=10
+Get the most visited products.
+
+Query parameters:
+- `limit` (optional): Number of results (default: 10, max: 100)
+
+Returns list of products with visit counts and unique visitor counts.
+
+#### GET /stats/searches/most-searched?limit=10
+Get the most searched keywords.
+
+Query parameters:
+- `limit` (optional): Number of results (default: 10, max: 100)
+
+Returns list of keywords with search counts and unique searcher counts.
+
+#### GET /stats/active-users?time_window_hours=24
+Get active users in a time window.
+
+Query parameters:
+- `time_window_hours` (optional): Hours to look back (default: 24, max: 720)
+
+Returns counts of total active users, active visitors, and active searchers.
+
+#### GET /stats/top-visitors?limit=10
+Get users with the most product visits.
+
+Query parameters:
+- `limit` (optional): Number of results (default: 10, max: 100)
+
+Returns list of users with visit counts, unique products, and last visit times.
+
+#### GET /stats/top-searchers?limit=10
+Get users with the most searches.
+
+Query parameters:
+- `limit` (optional): Number of results (default: 10, max: 100)
+
+Returns list of users with search counts, unique keywords, and last search times.
+
+#### GET /stats/interaction-trends?days=7
+Get daily interaction trends.
+
+Query parameters:
+- `days` (optional): Number of days to analyze (default: 7, max: 90)
+
+Returns daily breakdown of visits, searches, and unique users by date.
+
+**For detailed analytics documentation, see [INTERACTION_ANALYTICS.md](./INTERACTION_ANALYTICS.md)**
+
 ---
 
 ## Error Response Format

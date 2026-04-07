@@ -23,11 +23,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 app = FastAPI(title="Interaction Service", version="0.1.0", root_path="/interaction")
 
 # Configuration for deduplication
-PRODUCT_VISIT_COOLDOWN_MINUTES = int(os.getenv("PRODUCT_VISIT_COOLDOWN_MINUTES", "5"))
-SEARCH_COOLDOWN_MINUTES = int(os.getenv("SEARCH_COOLDOWN_MINUTES", "10"))
+PRODUCT_VISIT_COOLDOWN_MINUTES = int(os.getenv("PRODUCT_VISIT_COOLDOWN_MINUTES", "2"))
+SEARCH_COOLDOWN_MINUTES = int(os.getenv("SEARCH_COOLDOWN_MINUTES", "2"))
 
 # JWT Authentication
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+# Import analytics router
+from .analytics import router as analytics_router
+app.include_router(analytics_router, prefix="/stats", tags=["Analytics"])
 
 
 def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:

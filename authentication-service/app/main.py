@@ -9,6 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+
+
 try:
     from .database import get_db
     from .schemas import LoginRequest, TokenResponse, UserCreate, UserResponse
@@ -50,16 +52,66 @@ def _table_creation_sql_path() -> Path:
 def _insert_code_sql_path() -> Path:
     return Path(__file__).resolve().parent.parent / "insert_code.sql"
 
+def _sql_run_01_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "sql_code_01.sql"
+
+def _sql_run_02_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "sql_code_02.sql"
+
+
+def _split_sql_statements(script: str) -> list[str]:
+    statements = []
+    current = []
+
+    in_single_quote = False
+    in_double_quote = False
+    i = 0
+    n = len(script)
+
+    while i < n:
+        ch = script[i]
+        current.append(ch)
+
+        if ch == "'" and not in_double_quote:
+            # Handle SQL escaped single quote: ''
+            if in_single_quote and i + 1 < n and script[i + 1] == "'":
+                current.append(script[i + 1])
+                i += 1
+            else:
+                in_single_quote = not in_single_quote
+
+        elif ch == '"' and not in_single_quote:
+            # Handle escaped double quote inside identifiers: ""
+            if in_double_quote and i + 1 < n and script[i + 1] == '"':
+                current.append(script[i + 1])
+                i += 1
+            else:
+                in_double_quote = not in_double_quote
+
+        elif ch == ";" and not in_single_quote and not in_double_quote:
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement[:-1].strip())  # remove trailing ;
+            current = []
+
+        i += 1
+
+    tail = "".join(current).strip()
+    if tail:
+        statements.append(tail)
+
+    return statements
+
 
 def _execute_sql_file(db: Session, sql_path: Path) -> None:
     script = sql_path.read_text(encoding="utf-8")
-    statements = [stmt.strip() for stmt in script.split(";") if stmt.strip()]
+    statements = _split_sql_statements(script)
 
     print(f"Executing SQL bootstrap file: {sql_path}", flush=True)
     for statement in statements:
-        db.execute(text(statement))
+        if statement:
+            db.execute(text(statement))
     db.commit()
-
 
 def ensure_schema_and_seed(db: Session) -> None:
     existing = {
@@ -97,6 +149,24 @@ def ensure_schema_and_seed(db: Session) -> None:
                 "Skipping table_creation.sql to avoid destructive DROP SCHEMA. "
                 f"Missing: {', '.join(missing_tables)}"
             )
+
+    # Run update scripts if not already applied
+    if "users" in existing:
+        # Check if sql_code_01 has been applied (check product name for id 1)
+        result = db.execute(text("SELECT product_name FROM products WHERE product_id = 1")).fetchone()
+        if result and result[0] != 'A4 Spiral Notebook':
+            sql_01 = _sql_run_01_path()
+            if sql_01.exists():
+                _execute_sql_file(db, sql_01)
+                print("sql_code_01.sql executed successfully.", flush=True)
+
+        # Check if sql_code_02 has been applied (check image_url column type)
+        column_info = db.execute(text("SELECT data_type, character_maximum_length FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image_url'")).fetchone()
+        if not column_info or column_info[0] != 'character varying' or column_info[1] != 500:
+            sql_02 = _sql_run_02_path()
+            if sql_02.exists():
+                _execute_sql_file(db, sql_02)
+                print("sql_code_02.sql executed successfully.", flush=True)
 
 
 @app.on_event("startup")

@@ -113,8 +113,9 @@ def _execute_sql_file(db: Session, sql_path: Path) -> None:
             db.execute(text(statement))
     db.commit()
 
-def ensure_schema_and_seed(db: Session) -> None:
-    existing = {
+
+def _existing_public_tables(db: Session) -> set[str]:
+    return {
         row[0]
         for row in db.execute(
             text(
@@ -126,6 +127,54 @@ def ensure_schema_and_seed(db: Session) -> None:
             )
         ).fetchall()
     }
+
+
+def _apply_update_scripts_if_needed(db: Session, existing_tables: set[str]) -> None:
+    if "users" not in existing_tables or "products" not in existing_tables:
+        print("Skipping sql_code updates: users/products table not ready yet.", flush=True)
+        return
+
+    # Check if sql_code_01 has been applied (marker: product_id=1 renamed)
+    result = db.execute(text("SELECT product_name FROM products WHERE product_id = 1")).fetchone()
+    current_name = result[0] if result else None
+    if current_name != "A4 Spiral Notebook":
+        sql_01 = _sql_run_01_path()
+        if sql_01.exists():
+            _execute_sql_file(db, sql_01)
+            print("sql_code_01.sql executed successfully.", flush=True)
+        else:
+            print(f"Skipping sql_code_01.sql: file not found at {sql_01}", flush=True)
+    else:
+        print("sql_code_01.sql already applied.", flush=True)
+
+    # Check if sql_code_02 has been applied (marker: image_url is VARCHAR(500))
+    column_info = db.execute(
+        text(
+            """
+            SELECT data_type, character_maximum_length
+            FROM information_schema.columns
+            WHERE table_name = 'products' AND column_name = 'image_url'
+            """
+        )
+    ).fetchone()
+
+    should_run_sql_02 = (
+        not column_info
+        or column_info[0] != "character varying"
+        or column_info[1] != 500
+    )
+    if should_run_sql_02:
+        sql_02 = _sql_run_02_path()
+        if sql_02.exists():
+            _execute_sql_file(db, sql_02)
+            print("sql_code_02.sql executed successfully.", flush=True)
+        else:
+            print(f"Skipping sql_code_02.sql: file not found at {sql_02}", flush=True)
+    else:
+        print("sql_code_02.sql already applied.", flush=True)
+
+def ensure_schema_and_seed(db: Session) -> None:
+    existing = _existing_public_tables(db)
 
     missing_tables = [table for table in REQUIRED_TABLES if table not in existing]
     if missing_tables:
@@ -150,23 +199,9 @@ def ensure_schema_and_seed(db: Session) -> None:
                 f"Missing: {', '.join(missing_tables)}"
             )
 
-    # Run update scripts if not already applied
-    if "users" in existing:
-        # Check if sql_code_01 has been applied (check product name for id 1)
-        result = db.execute(text("SELECT product_name FROM products WHERE product_id = 1")).fetchone()
-        if result and result[0] != 'A4 Spiral Notebook':
-            sql_01 = _sql_run_01_path()
-            if sql_01.exists():
-                _execute_sql_file(db, sql_01)
-                print("sql_code_01.sql executed successfully.", flush=True)
-
-        # Check if sql_code_02 has been applied (check image_url column type)
-        column_info = db.execute(text("SELECT data_type, character_maximum_length FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image_url'")).fetchone()
-        if not column_info or column_info[0] != 'character varying' or column_info[1] != 500:
-            sql_02 = _sql_run_02_path()
-            if sql_02.exists():
-                _execute_sql_file(db, sql_02)
-                print("sql_code_02.sql executed successfully.", flush=True)
+    # Refresh table snapshot after possible bootstrap and then apply idempotent updates.
+    existing = _existing_public_tables(db)
+    _apply_update_scripts_if_needed(db, existing)
 
 
 @app.on_event("startup")

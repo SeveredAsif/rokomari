@@ -98,7 +98,10 @@ def health_check(db: Session = Depends(get_db)) -> dict[str, str]:
     return {"status": "ok", "service": "interaction-service"}
 
 
-@app.post("/interactions/product-visit", status_code=status.HTTP_201_CREATED)
+# Canonical route (matches other services that rely on root_path only)
+@app.post("/product-visit", status_code=status.HTTP_201_CREATED)
+# Backward-compatible alias for existing clients
+@app.post("/interactions/product-visit", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db)):
     ensure_user_exists(db, payload.user_id)
     ensure_product_exists(db, payload.product_id)
@@ -123,7 +126,8 @@ def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db
     }
 
 
-@app.post("/interactions/search", status_code=status.HTTP_201_CREATED)
+@app.post("/search", status_code=status.HTTP_201_CREATED)
+@app.post("/interactions/search", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def add_search_history(payload: SearchRequest, db: Session = Depends(get_db)):
     ensure_user_exists(db, payload.user_id)
 
@@ -147,7 +151,8 @@ def add_search_history(payload: SearchRequest, db: Session = Depends(get_db)):
     }
 
 
-@app.post("/interactions/address", status_code=status.HTTP_201_CREATED)
+@app.post("/address", status_code=status.HTTP_201_CREATED)
+@app.post("/interactions/address", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def add_address(payload: AddressCreateRequest, db: Session = Depends(get_db)):
     ensure_user_exists(db, payload.user_id)
 
@@ -184,7 +189,8 @@ def add_address(payload: AddressCreateRequest, db: Session = Depends(get_db)):
     }
 
 
-@app.post("/interactions/cart/save")
+@app.post("/cart/save")
+@app.post("/interactions/cart/save", include_in_schema=False)
 def save_cart(payload: SaveCartRequest, db: Session = Depends(get_db)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Cart items cannot be empty")
@@ -239,7 +245,8 @@ def save_cart(payload: SaveCartRequest, db: Session = Depends(get_db)):
     }
 
 
-@app.post("/interactions/order", status_code=status.HTTP_201_CREATED)
+@app.post("/order", status_code=status.HTTP_201_CREATED)
+@app.post("/interactions/order", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_order(payload: CreateOrderRequest, db: Session = Depends(get_db)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Order items cannot be empty")

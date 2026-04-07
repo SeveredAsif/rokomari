@@ -44,7 +44,7 @@ For local debugging you can also call services directly by port from the browser
 - Auth: `http://localhost:8000/login`, `http://localhost:8000/register`, ...
 - Recommendation: `http://localhost:8001/recommendations`, ...
 - Product Search: `http://localhost:8002/search`, ...
-- Interaction: `http://localhost:8004/interactions/product-visit`, ...
+- Interaction: `http://localhost:8004/product-visit`, ...
 
 ---
 
@@ -226,7 +226,7 @@ Root “service is running” message.
 ### GET /health
 Health check.
 
-### POST /interactions/product-visit
+### POST /product-visit
 Records a product visit.
 
 Request body:
@@ -234,7 +234,9 @@ Request body:
 { "user_id": 5, "product_id": 20 }
 ```
 
-### POST /interactions/search
+Legacy alias (still supported): `POST /interactions/product-visit`
+
+### POST /search
 Records a user search keyword.
 
 Request body:
@@ -242,10 +244,14 @@ Request body:
 { "user_id": 5, "searched_keyword": "atomic habits" }
 ```
 
-### POST /interactions/address
+Legacy alias (still supported): `POST /interactions/search`
+
+### POST /address
 Creates an address for a user.
 
-### POST /interactions/cart/save
+Legacy alias (still supported): `POST /interactions/address`
+
+### POST /cart/save
 Creates or replaces a user’s cart items.
 
 Request body:
@@ -259,7 +265,9 @@ Request body:
 }
 ```
 
-### POST /interactions/order
+Legacy alias (still supported): `POST /interactions/cart/save`
+
+### POST /order
 Creates an order + order items + order status + payment.
 
 Request body:
@@ -277,6 +285,8 @@ Request body:
   "order_status": "PENDING"
 }
 ```
+
+Legacy alias (still supported): `POST /interactions/order`
 
 ---
 

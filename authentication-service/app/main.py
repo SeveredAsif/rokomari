@@ -63,6 +63,10 @@ def _sql_run_03_path() -> Path:
     return Path(__file__).resolve().parent.parent / "sql_code_03.sql"
 
 
+def _sql_run_04_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "sql_code_04.sql"
+
+
 def _split_sql_statements(script: str) -> list[str]:
     statements = []
     current = []
@@ -231,6 +235,14 @@ def _apply_update_scripts_if_needed(db: Session, existing_tables: set[str]) -> N
         print("sql_code_03.sql executed successfully.", flush=True)
     else:
         print("sql_code_03.sql already applied.", flush=True)
+
+    # One-time visit rebalance migration (internally guarded by marker table).
+    sql_04 = _sql_run_04_path()
+    if sql_04.exists():
+        _execute_sql_file(db, sql_04)
+        print("sql_code_04.sql checked/applied successfully.", flush=True)
+    else:
+        print(f"Skipping sql_code_04.sql: file not found at {sql_04}", flush=True)
 
 def ensure_schema_and_seed(db: Session) -> None:
     existing = _existing_public_tables(db)

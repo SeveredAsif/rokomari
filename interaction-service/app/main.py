@@ -1,8 +1,11 @@
 import os
+import jwt
 from decimal import Decimal
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -19,6 +22,104 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app = FastAPI(title="Interaction Service", version="0.1.0", root_path="/interaction")
 
+# Configuration for deduplication
+PRODUCT_VISIT_COOLDOWN_MINUTES = int(os.getenv("PRODUCT_VISIT_COOLDOWN_MINUTES", "5"))
+SEARCH_COOLDOWN_MINUTES = int(os.getenv("SEARCH_COOLDOWN_MINUTES", "10"))
+
+# JWT Authentication
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+    """
+    Verifies a user's JWT token and returns the decoded payload.
+    The decoded payload contains 'sub' field with the user's email.
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials
+    try:
+        decoded = jwt.decode(
+            token,
+            key=os.getenv("JWT_SECRET"),
+            algorithms=["HS256"]
+        )
+        return decoded
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _resolve_user_id(db: Session, principal: str | int | None) -> int:
+    """
+    Resolves a JWT subject (email) or user_id integer to a user_id.
+    Follows the pattern from productSearch-service/app/search.py.
+    """
+    if principal is None:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    as_text = str(principal).strip()
+    if as_text.isdigit():
+        return int(as_text)
+
+    user = db.execute(text("SELECT user_id FROM users WHERE email = :email"), {"email": as_text}).fetchone()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found for token subject")
+
+    return user.user_id
+
+
+def _is_product_visit_duplicate(db: Session, user_id: int, product_id: int) -> bool:
+    """
+    Check if user visited the same product within the cooldown period.
+    Returns True if it's a duplicate (should skip recording), False otherwise.
+    """
+    cutoff_time = datetime.utcnow() - timedelta(minutes=PRODUCT_VISIT_COOLDOWN_MINUTES)
+    
+    recent_visit = db.execute(
+        text("""
+            SELECT visit_id FROM product_visits 
+            WHERE user_id = :user_id 
+            AND product_id = :product_id 
+            AND visited_at > :cutoff_time
+            LIMIT 1
+        """),
+        {"user_id": user_id, "product_id": product_id, "cutoff_time": cutoff_time}
+    ).fetchone()
+    
+    return recent_visit is not None
+
+
+def _is_search_duplicate(db: Session, user_id: int, searched_keyword: str) -> bool:
+    """
+    Check if user searched the same keyword within the cooldown period.
+    Normalizes keyword for comparison (lowercase, trimmed).
+    Returns True if it's a duplicate (should skip recording), False otherwise.
+    """
+    cutoff_time = datetime.utcnow() - timedelta(minutes=SEARCH_COOLDOWN_MINUTES)
+    normalized_keyword = searched_keyword.lower().strip()
+    
+    recent_search = db.execute(
+        text("""
+            SELECT search_id FROM search_history 
+            WHERE user_id = :user_id 
+            AND LOWER(TRIM(searched_keyword)) = :normalized_keyword 
+            AND searched_at > :cutoff_time
+            LIMIT 1
+        """),
+        {"user_id": user_id, "normalized_keyword": normalized_keyword, "cutoff_time": cutoff_time}
+    ).fetchone()
+    
+    return recent_search is not None
+
 
 class ProductVisitRequest(BaseModel):
     user_id: int
@@ -27,6 +128,15 @@ class ProductVisitRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     user_id: int
+    searched_keyword: str
+
+
+# JWT-authenticated request models (only need product_id or searched_keyword)
+class ProductVisitRequestJWT(BaseModel):
+    product_id: int
+
+
+class SearchRequestJWT(BaseModel):
     searched_keyword: str
 
 
@@ -106,6 +216,15 @@ def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db
     ensure_user_exists(db, payload.user_id)
     ensure_product_exists(db, payload.product_id)
 
+    # Check for duplicate product visit within cooldown period
+    if _is_product_visit_duplicate(db, payload.user_id, payload.product_id):
+        return {
+            "message": "Duplicate product visit (within cooldown period)",
+            "user_id": payload.user_id,
+            "product_id": payload.product_id,
+            "skipped": True
+        }
+
     row = db.execute(
         text(
             """
@@ -123,6 +242,7 @@ def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db
         "user_id": row.user_id,
         "product_id": row.product_id,
         "visited_at": row.visited_at,
+        "skipped": False
     }
 
 
@@ -130,6 +250,15 @@ def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db
 @app.post("/interactions/search", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def add_search_history(payload: SearchRequest, db: Session = Depends(get_db)):
     ensure_user_exists(db, payload.user_id)
+
+    # Check for duplicate search within cooldown period
+    if _is_search_duplicate(db, payload.user_id, payload.searched_keyword):
+        return {
+            "message": "Duplicate search (within cooldown period)",
+            "user_id": payload.user_id,
+            "searched_keyword": payload.searched_keyword,
+            "skipped": True
+        }
 
     row = db.execute(
         text(
@@ -148,6 +277,97 @@ def add_search_history(payload: SearchRequest, db: Session = Depends(get_db)):
         "user_id": row.user_id,
         "searched_keyword": row.searched_keyword,
         "searched_at": row.searched_at,
+        "skipped": False
+    }
+
+
+# JWT-authenticated variants: extract user_id from token
+@app.post("/me/product-visit", status_code=status.HTTP_201_CREATED)
+def add_product_visit_jwt(
+    payload: ProductVisitRequestJWT,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_jwt)
+):
+    """
+    JWT-authenticated variant of POST /product-visit.
+    Reads user_id from the JWT token's 'sub' field (email).
+    Only requires product_id in the request body.
+    """
+    user_id = _resolve_user_id(db, current_user.get("sub"))
+    ensure_user_exists(db, user_id)
+    ensure_product_exists(db, payload.product_id)
+
+    # Check for duplicate product visit within cooldown period
+    if _is_product_visit_duplicate(db, user_id, payload.product_id):
+        return {
+            "message": "Duplicate product visit (within cooldown period)",
+            "user_id": user_id,
+            "product_id": payload.product_id,
+            "skipped": True
+        }
+
+    row = db.execute(
+        text(
+            """
+            INSERT INTO product_visits (user_id, product_id)
+            VALUES (:user_id, :product_id)
+            RETURNING visit_id, user_id, product_id, visited_at
+            """
+        ),
+        {"user_id": user_id, "product_id": payload.product_id},
+    ).fetchone()
+    db.commit()
+
+    return {
+        "visit_id": row.visit_id,
+        "user_id": row.user_id,
+        "product_id": row.product_id,
+        "visited_at": row.visited_at,
+        "skipped": False
+    }
+
+
+@app.post("/me/search", status_code=status.HTTP_201_CREATED)
+def add_search_history_jwt(
+    payload: SearchRequestJWT,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_jwt)
+):
+    """
+    JWT-authenticated variant of POST /search.
+    Reads user_id from the JWT token's 'sub' field (email).
+    Only requires searched_keyword in the request body.
+    """
+    user_id = _resolve_user_id(db, current_user.get("sub"))
+    ensure_user_exists(db, user_id)
+
+    # Check for duplicate search within cooldown period
+    if _is_search_duplicate(db, user_id, payload.searched_keyword):
+        return {
+            "message": "Duplicate search (within cooldown period)",
+            "user_id": user_id,
+            "searched_keyword": payload.searched_keyword,
+            "skipped": True
+        }
+
+    row = db.execute(
+        text(
+            """
+            INSERT INTO search_history (user_id, searched_keyword)
+            VALUES (:user_id, :searched_keyword)
+            RETURNING search_id, user_id, searched_keyword, searched_at
+            """
+        ),
+        {"user_id": user_id, "searched_keyword": payload.searched_keyword},
+    ).fetchone()
+    db.commit()
+
+    return {
+        "search_id": row.search_id,
+        "user_id": row.user_id,
+        "searched_keyword": row.searched_keyword,
+        "searched_at": row.searched_at,
+        "skipped": False
     }
 
 

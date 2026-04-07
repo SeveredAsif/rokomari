@@ -230,12 +230,12 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
           </div>
         </section>
 
-        <ProductGrid
+        {/* <ProductGrid
             products={recommendedProducts}
             sectionTitle={user ? "Recommended for You" : "Popular Books"}
             searchError={recommendedError}
             onBookClick={onBookClick}
-        />
+        /> */}
 
         {/* 🔥 ONLY show these when NOT searching */}
         {!isSearching && (

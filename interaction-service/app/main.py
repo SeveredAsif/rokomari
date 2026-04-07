@@ -1,8 +1,10 @@
 import os
+import jwt
 from decimal import Decimal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -19,6 +21,56 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app = FastAPI(title="Interaction Service", version="0.1.0", root_path="/interaction")
 
+# JWT Authentication
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+    """
+    Verifies a user's JWT token and returns the decoded payload.
+    The decoded payload contains 'sub' field with the user's email.
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials
+    try:
+        decoded = jwt.decode(
+            token,
+            key=os.getenv("JWT_SECRET"),
+            algorithms=["HS256"]
+        )
+        return decoded
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _resolve_user_id(db: Session, principal: str | int | None) -> int:
+    """
+    Resolves a JWT subject (email) or user_id integer to a user_id.
+    Follows the pattern from productSearch-service/app/search.py.
+    """
+    if principal is None:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    as_text = str(principal).strip()
+    if as_text.isdigit():
+        return int(as_text)
+
+    user = db.execute(text("SELECT user_id FROM users WHERE email = :email"), {"email": as_text}).fetchone()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found for token subject")
+
+    return user.user_id
+
 
 class ProductVisitRequest(BaseModel):
     user_id: int
@@ -27,6 +79,15 @@ class ProductVisitRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     user_id: int
+    searched_keyword: str
+
+
+# JWT-authenticated request models (only need product_id or searched_keyword)
+class ProductVisitRequestJWT(BaseModel):
+    product_id: int
+
+
+class SearchRequestJWT(BaseModel):
     searched_keyword: str
 
 
@@ -140,6 +201,76 @@ def add_search_history(payload: SearchRequest, db: Session = Depends(get_db)):
             """
         ),
         {"user_id": payload.user_id, "searched_keyword": payload.searched_keyword},
+    ).fetchone()
+    db.commit()
+
+    return {
+        "search_id": row.search_id,
+        "user_id": row.user_id,
+        "searched_keyword": row.searched_keyword,
+        "searched_at": row.searched_at,
+    }
+
+
+# JWT-authenticated variants: extract user_id from token
+@app.post("/me/product-visit", status_code=status.HTTP_201_CREATED)
+def add_product_visit_jwt(
+    payload: ProductVisitRequestJWT,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_jwt)
+):
+    """
+    JWT-authenticated variant of POST /product-visit.
+    Reads user_id from the JWT token's 'sub' field (email).
+    Only requires product_id in the request body.
+    """
+    user_id = _resolve_user_id(db, current_user.get("sub"))
+    ensure_user_exists(db, user_id)
+    ensure_product_exists(db, payload.product_id)
+
+    row = db.execute(
+        text(
+            """
+            INSERT INTO product_visits (user_id, product_id)
+            VALUES (:user_id, :product_id)
+            RETURNING visit_id, user_id, product_id, visited_at
+            """
+        ),
+        {"user_id": user_id, "product_id": payload.product_id},
+    ).fetchone()
+    db.commit()
+
+    return {
+        "visit_id": row.visit_id,
+        "user_id": row.user_id,
+        "product_id": row.product_id,
+        "visited_at": row.visited_at,
+    }
+
+
+@app.post("/me/search", status_code=status.HTTP_201_CREATED)
+def add_search_history_jwt(
+    payload: SearchRequestJWT,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_jwt)
+):
+    """
+    JWT-authenticated variant of POST /search.
+    Reads user_id from the JWT token's 'sub' field (email).
+    Only requires searched_keyword in the request body.
+    """
+    user_id = _resolve_user_id(db, current_user.get("sub"))
+    ensure_user_exists(db, user_id)
+
+    row = db.execute(
+        text(
+            """
+            INSERT INTO search_history (user_id, searched_keyword)
+            VALUES (:user_id, :searched_keyword)
+            RETURNING search_id, user_id, searched_keyword, searched_at
+            """
+        ),
+        {"user_id": user_id, "searched_keyword": payload.searched_keyword},
     ).fetchone()
     db.commit()
 

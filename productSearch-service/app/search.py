@@ -6,11 +6,13 @@ from sqlalchemy import func
 
 from .database import get_db
 from .auth import verify_jwt
-from .similarity import compute_cosine_similarities, filter_by_threshold
+from .similarity import compute_cosine_similarities, filter_by_threshold, rank_by_similarity
 from .cache import cache_get, cache_set
 from . import models
 
 router = APIRouter(prefix="/search", tags=["Search"])
+
+SEARCH_CACHE_VERSION = "v2"
 
 
 def _resolve_user_id(db: Session, principal: str | int | None) -> int:
@@ -42,7 +44,7 @@ def search_products(
     user_id = _resolve_user_id(db, current_user.get("sub"))
 
     normalized_q = q.lower().strip()
-    cache_key = f"search:{user_id}:{normalized_q}"
+    cache_key = f"search:{SEARCH_CACHE_VERSION}:{user_id}:{normalized_q}:t{threshold:.3f}"
     cached = cache_get(cache_key)
     if cached is not None:
         return {
@@ -83,7 +85,15 @@ def search_products(
         for p in products
     ]
 
+    ranked_results = rank_by_similarity(scores, product_dicts)
     results = filter_by_threshold(scores, product_dicts, threshold)[:limit]
+
+    # Always return non-empty results when products exist:
+    # if threshold filters everything out, fall back to top ranked matches.
+    source = "db"
+    if not results:
+        results = ranked_results[:limit]
+        source = "db_fallback"
 
     cache_set(cache_key, results, ttl_seconds=300)
 
@@ -100,7 +110,7 @@ def search_products(
         db.rollback()
 
     return {
-        "source": "db",
+        "source": source,
         "query": q,
         "count": len(results),
         "threshold": threshold,

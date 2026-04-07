@@ -36,8 +36,27 @@ Here we use scikit-learn, Python's most popular ML library for text vectorizatio
 """
 
 import numpy as np
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+
+def _normalize_token(token: str) -> str:
+    # Very light stemming/singularization without extra dependencies.
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 3 and token.endswith("es"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def _normalize_text(text: str) -> str:
+    text = (text or "").lower().strip()
+    text = re.sub(r"[^a-z0-9\s]+", " ", text)
+    tokens = [_normalize_token(tok) for tok in text.split() if tok]
+    return " ".join(tokens)
 
 
 def compute_cosine_similarities(query: str, candidates: list[str]) -> np.ndarray:
@@ -61,34 +80,64 @@ def compute_cosine_similarities(query: str, candidates: list[str]) -> np.ndarray
     if not candidates:
         return np.array([])
 
-    # Combine query and candidates for vectorization
-    # This ensures they're vectorized in the same "vocabulary space"
-    texts = [query] + candidates
+    # Normalize both query and candidates to improve plural/singular matching
+    # (e.g. "graphics" vs "graphic") and punctuation differences.
+    normalized_query = _normalize_text(query)
+    normalized_candidates = [_normalize_text(c) for c in candidates]
 
-    # TfidfVectorizer converts text to TF-IDF vectors
-    # (Term Frequency - Inverse Document Frequency)
-    # This weighs common words lower and rare/distinctive words higher.
-    vectorizer = TfidfVectorizer(
-        lowercase=True,
-        stop_words='english',  # ignore common words like "the", "a", "is"
-        ngram_range=(1, 2),    # consider both single words and 2-word phrases
-        max_features=100,      # limit to top 100 features for speed
-    )
+    # Build a hybrid similarity score:
+    # 1) word-level TF-IDF for semantics
+    # 2) char-level TF-IDF for morphology/typos
+    texts = [normalized_query] + normalized_candidates
 
-    # Fit and transform all texts to vectors
-    tfidf_matrix = vectorizer.fit_transform(texts)
+    try:
+        word_vectorizer = TfidfVectorizer(
+            lowercase=False,
+            stop_words="english",
+            ngram_range=(1, 3),
+            max_features=5000,
+            sublinear_tf=True,
+        )
+        word_matrix = word_vectorizer.fit_transform(texts)
+        word_sim = cosine_similarity(word_matrix[0], word_matrix[1:])[0]
+    except ValueError:
+        # Empty vocabulary can happen for degenerate inputs.
+        word_sim = np.zeros(len(candidates), dtype=float)
 
-    # Extract the query vector (first row)
-    query_vector = tfidf_matrix[0]
+    try:
+        char_vectorizer = TfidfVectorizer(
+            lowercase=False,
+            analyzer="char_wb",
+            ngram_range=(3, 5),
+            max_features=8000,
+            sublinear_tf=True,
+        )
+        char_matrix = char_vectorizer.fit_transform(texts)
+        char_sim = cosine_similarity(char_matrix[0], char_matrix[1:])[0]
+    except ValueError:
+        char_sim = np.zeros(len(candidates), dtype=float)
 
-    # Extract candidate vectors (rest of the rows)
-    candidate_vectors = tfidf_matrix[1:]
+    similarities = 0.7 * word_sim + 0.3 * char_sim
 
-    # Compute cosine similarity between query and each candidate
-    # Result shape: (1, len(candidates)) → flatten to (len(candidates),)
-    similarities = cosine_similarity(query_vector, candidate_vectors)[0]
+    # Small overlap boost for multi-token queries like "graphics books".
+    query_tokens = set(normalized_query.split())
+    if query_tokens:
+        for i, candidate_text in enumerate(normalized_candidates):
+            candidate_tokens = set(candidate_text.split())
+            overlap = len(query_tokens & candidate_tokens) / max(len(query_tokens), 1)
+            similarities[i] = min(1.0, similarities[i] + 0.15 * overlap)
 
     return similarities
+
+
+def rank_by_similarity(similarities: np.ndarray, products: list[dict]) -> list[dict]:
+    ranked = []
+    for product, score in zip(products, similarities):
+        product_with_score = product.copy()
+        product_with_score["similarity_score"] = float(score)
+        ranked.append(product_with_score)
+    ranked.sort(key=lambda x: x["similarity_score"], reverse=True)
+    return ranked
 
 
 def filter_by_threshold(
@@ -121,16 +170,5 @@ def filter_by_threshold(
             {"id": 3, "name": "history novels", "similarity_score": 0.75}
         ]
     """
-    results = []
-
-    for idx, (product, score) in enumerate(zip(products, similarities)):
-        if score >= threshold:
-            # Create a copy so we don't modify the original
-            product_with_score = product.copy()
-            product_with_score["similarity_score"] = float(score)
-            results.append(product_with_score)
-
-    # Sort by similarity score descending (highest first)
-    results.sort(key=lambda x: x["similarity_score"], reverse=True)
-
-    return results
+    ranked = rank_by_similarity(similarities, products)
+    return [item for item in ranked if item["similarity_score"] >= threshold]

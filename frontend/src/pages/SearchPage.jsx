@@ -121,19 +121,14 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
     performSearch(q, filters);
   };
 
-  const handleApplyFilters = (e) => {
-    e.preventDefault();
-    const q = inputQuery.trim() || activeQuery.trim();
-    if (!q) return;
-    performSearch(q, filters);
-  };
+  useEffect(() => {
+    if (!activeQuery?.trim()) return;
+    const timeout = setTimeout(() => {
+      performSearch(activeQuery, filters);
+    }, 250);
 
-  const handleResetFilters = () => {
-    setFilters(DEFAULT_FILTERS);
-    const q = inputQuery.trim() || activeQuery.trim();
-    if (!q) return;
-    performSearch(q, DEFAULT_FILTERS);
-  };
+    return () => clearTimeout(timeout);
+  }, [filters, activeQuery]);
 
   const minHint = filterOptions.price_range?.min;
   const maxHint = filterOptions.price_range?.max;
@@ -154,8 +149,9 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
       <div className="search-page-layout">
         {/* Left Sidebar - Filters */}
         <aside className="filter-sidebar">
-          <h3>Sort & Filter</h3>
-          <form onSubmit={handleApplyFilters}>
+          <h3>Search Controls</h3>
+          <div className="filter-section">
+            <h4>Sort</h4>
             <div className="filter-fields">
               <label>
                 Sort By
@@ -183,6 +179,12 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
                   <option value="asc">Ascending</option>
                 </select>
               </label>
+            </div>
+          </div>
+
+          <div className="filter-section">
+            <h4>Filters</h4>
+            <div className="filter-fields">
 
               <label>
                 Price Range: ৳{filters.minPrice || minHint || 0} - ৳{filters.maxPrice || maxHint || 10000}
@@ -393,16 +395,7 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
                 </div>
               </fieldset>
             </div>
-
-            <div className="filter-actions">
-              <button className="search-btn" type="submit" disabled={isSearching}>
-                {isSearching ? "Applying..." : "Apply Filters"}
-              </button>
-              <button className="link-btn" type="button" onClick={handleResetFilters}>
-                Reset
-              </button>
-            </div>
-          </form>
+          </div>
 
           <datalist id="type-options">
             {(filterOptions.product_types || []).map((type) => (

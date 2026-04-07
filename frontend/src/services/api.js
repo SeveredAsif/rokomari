@@ -41,6 +41,14 @@ export async function fetchPopularRecommendations() {
   return resp.json();
 }
 
+export async function fetchPersonalizedRecommendations(token, limit = 6) {
+  const resp = await fetch(`/recommendation/recommendations?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) throw new Error(await getErrorMessage(resp, "Failed to load personalized recommendations"));
+  return resp.json();
+}
+
 export async function fetchTrendingSearches() {
   const resp = await fetch("/productsearch/search/trending?limit=8");
   if (!resp.ok) throw new Error(await getErrorMessage(resp, "Failed to load trending searches"));

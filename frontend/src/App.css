@@ -188,6 +188,27 @@ h2 {
   overflow-x: auto;
 }
 
+.banner-section {
+  background: #f9fafb;
+  padding: 20px 0;
+}
+
+.banner-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.banner-image {
+  width: 100%;
+  max-width: 1000px;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
 .home-page {
   max-width: 1200px;
   margin: 0 auto;

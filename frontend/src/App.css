@@ -93,19 +93,60 @@ h2 {
 }
 
 /* Button */
-.primary-btn {
-  margin-top: 10px;
-  padding: 12px;
+.primary-btn,
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #22c55e;
   color: white;
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 14px;
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
+  min-height: 44px;
+  min-width: 110px;
 }
 
-.primary-btn:disabled {
+.primary-btn,
+.search-btn {
+  margin-top: 10px;
+}
+
+.primary-btn:hover,
+.search-btn:hover,
+.filter-actions button:hover {
+  background: #16a34a;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(22, 163, 74, 0.16);
+}
+
+.primary-btn:disabled,
+.search-btn:disabled,
+.filter-actions button:disabled {
   background: #9ca3af;
+  opacity: 0.9;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.link-btn {
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: transparent;
+  color: #2563eb;
+  border: 1px solid transparent;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.link-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.2);
 }
 
 /* Message */
@@ -120,6 +161,31 @@ h2 {
 
 .message.error {
   color: red;
+}
+
+.toast {
+  position: fixed;
+  top: 100px;
+  right: 24px;
+  z-index: 2000;
+  min-width: 280px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.15);
+  font-weight: 600;
+  text-align: center;
+}
+
+.toast.success {
+  background: #ecfdf5;
+  border: 1px solid #d1fae5;
+  color: #166534;
+}
+
+.toast.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
 }
 
 /* Switch */
@@ -347,11 +413,6 @@ h2 {
   font-size: 14px;
 }
 
-.search-btn:disabled {
-  background: #86efac;
-  cursor: not-allowed;
-}
-
 @media (max-width: 1024px) {
   .product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -542,17 +603,27 @@ h2 {
 
 .filter-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   margin-top: 16px;
 }
 
 .filter-actions button {
   flex: 1;
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 12px 18px;
+  font-size: 14px;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
+  background: #f8fafc;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.filter-actions button:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  transform: translateY(-1px);
 }
 
 .search-results-main {

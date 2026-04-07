@@ -1,8 +1,33 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Header from "../components/Header";
 import { recordProductVisit } from "../services/api";
 
 export default function BookDetailPage({ book, user, token, onLogout, onRequestLogin, onGoBack }) {
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionType, setActionType] = useState("success");
+
+  const showActionMessage = (message, type = "success") => {
+    setActionMessage(message);
+    setActionType(type);
+    window.setTimeout(() => setActionMessage(""), 3000);
+  };
+
+  const handleAddToCart = () => {
+    if (!token) {
+      onRequestLogin();
+      return;
+    }
+    showActionMessage("Added to cart successfully", "success");
+  };
+
+  const handleAddToWishlist = () => {
+    if (!token) {
+      onRequestLogin();
+      return;
+    }
+    showActionMessage("Added to wishlist successfully", "success");
+  };
+
   useEffect(() => {
     if (!token || !book?.id) {
       return;
@@ -33,6 +58,11 @@ export default function BookDetailPage({ book, user, token, onLogout, onRequestL
       />
 
       <div className="home-page">
+        {actionMessage && (
+          <div className={`toast ${actionType}`}>
+            {actionMessage}
+          </div>
+        )}
 
         {/* Back button */}
         <button className="link-btn" onClick={onGoBack} style={{ marginBottom: "16px", fontSize: "14px" }}>
@@ -67,13 +97,14 @@ export default function BookDetailPage({ book, user, token, onLogout, onRequestL
               <p className="meta-text">👁 {book.visitCount} people viewed this</p>
             )}
 
-            <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
-              <button className="primary-btn" style={{ flex: 1, marginTop: 0 }}>
+            <div style={{ display: "flex", gap: "12px", marginTop: "8px", flexWrap: "wrap" }}>
+              <button className="primary-btn" style={{ flex: 1, marginTop: 0 }} onClick={handleAddToCart}>
                 🛒 Add to Cart
               </button>
               <button
                 className="primary-btn"
                 style={{ flex: 1, marginTop: 0, background: "white", color: "#22c55e", border: "1px solid #22c55e" }}
+                onClick={handleAddToWishlist}
               >
                 ♡ Wishlist
               </button>

@@ -55,14 +55,51 @@ export async function fetchSearchHistory(token) {
   return resp.json();
 }
 
-export async function searchProducts(query, token) {
+export async function fetchSearchFilters(token) {
   const headers = token
     ? { Authorization: `Bearer ${token}` }
     : {};
-  const resp = await fetch(
-    `/productsearch/search?q=${encodeURIComponent(query)}&limit=12&threshold=0.1`,
-    { headers }
-  );
+  const resp = await fetch("/productsearch/search/filters", { headers });
+  if (!resp.ok) {
+    if (resp.status === 401) throw Object.assign(new Error("Session expired. Please login again."), { status: 401 });
+    throw new Error(await getErrorMessage(resp, "Failed to load search filters"));
+  }
+  return resp.json();
+}
+
+export async function searchProducts(query, token, options = {}) {
+  const {
+    limit = 12,
+    threshold = 0.1,
+    minPrice,
+    maxPrice,
+    productTypes,
+    brand,
+    author,
+    publisher,
+    sortBy = "relevance",
+    sortOrder = "desc",
+  } = options;
+
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+    threshold: String(threshold),
+    sort_by: sortBy,
+    sort_order: sortOrder,
+  });
+
+  if (minPrice !== undefined && minPrice !== null && minPrice !== "") params.set("min_price", String(minPrice));
+  if (maxPrice !== undefined && maxPrice !== null && maxPrice !== "") params.set("max_price", String(maxPrice));
+  if (productTypes) params.set("product_types", productTypes);
+  if (brand) params.set("brand", brand);
+  if (author) params.set("author", author);
+  if (publisher) params.set("publisher", publisher);
+
+  const headers = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+  const resp = await fetch(`/productsearch/search?${params.toString()}`, { headers });
   if (!resp.ok) {
     if (resp.status === 401) throw Object.assign(new Error("Session expired. Please login again."), { status: 401 });
     throw new Error(await getErrorMessage(resp, "Search failed"));

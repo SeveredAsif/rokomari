@@ -9,23 +9,28 @@ export default function ProductGrid({ products, sectionTitle, searchError, onBoo
 
       {products.length > 0 ? (
         <section className="product-grid">
-          {products.map((item) => (
-            <div 
-              className="product-card" 
-              key={item.id}
-              onClick={() => onBookClick && onBookClick(item)}
-              style={{ cursor: "pointer" }}
-              role="button"
-              tabIndex={0}
-            >
-              <div className="product-thumb">
-                <img src={item.image} alt={item.title} />
+          {products.map((item) => {
+            const authorLine = [item.author, item.publisher].filter(Boolean).join(" | ");
+
+            return (
+              <div
+                className="product-card"
+                key={item.id}
+                onClick={() => onBookClick && onBookClick(item)}
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="product-thumb">
+                  <img src={item.image} alt={item.title} />
+                </div>
+                <h4>{item.title}</h4>
+                <p>{authorLine || item.author || "Unknown"}</p>
+                {item.category && <p className="meta-text">{item.category}</p>}
+                <strong className="product-price">{item.price}</strong>
               </div>
-              <h4>{item.title}</h4>
-              <p>{item.author}</p>
-              <strong className="product-price">{item.price}</strong>
-            </div>
-          ))}
+            );
+          })}
         </section>
       ) : (
         <p className="info-text">No products found.</p>

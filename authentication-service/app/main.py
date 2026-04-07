@@ -59,6 +59,10 @@ def _sql_run_02_path() -> Path:
     return Path(__file__).resolve().parent.parent / "sql_code_02.sql"
 
 
+def _sql_run_03_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "sql_code_03.sql"
+
+
 def _split_sql_statements(script: str) -> list[str]:
     statements = []
     current = []
@@ -129,6 +133,49 @@ def _existing_public_tables(db: Session) -> set[str]:
     }
 
 
+def _needs_sql_03(db: Session) -> bool:
+    type_category_mismatch = db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM products p
+            JOIN categories c ON c.category_id = p.category_id
+            WHERE
+                (p.product_type = 'BOOK' AND lower(c.category_name) <> 'books')
+                OR (p.product_type = 'STATIONERY' AND lower(c.category_name) <> 'stationery')
+                OR (p.product_type = 'ELECTRONICS' AND lower(c.category_name) <> 'electronics')
+                OR (p.product_type = 'GIFT' AND lower(c.category_name) <> 'gift items')
+                OR (p.product_type = 'OTHER' AND lower(c.category_name) <> 'other')
+            """
+        )
+    ).scalar() or 0
+
+    dummy_book_metadata = db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM book_details
+            WHERE
+                author ~ '^Author [0-9]+$'
+                OR publisher ~ '^Publisher [0-9]+$'
+            """
+        )
+    ).scalar() or 0
+
+    missing_book_details = db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM products p
+            LEFT JOIN book_details bd ON bd.product_id = p.product_id
+            WHERE p.product_type = 'BOOK' AND bd.product_id IS NULL
+            """
+        )
+    ).scalar() or 0
+
+    return (type_category_mismatch > 0) or (dummy_book_metadata > 0) or (missing_book_details > 0)
+
+
 def _apply_update_scripts_if_needed(db: Session, existing_tables: set[str]) -> None:
     if "users" not in existing_tables or "products" not in existing_tables:
         print("Skipping sql_code updates: users/products table not ready yet.", flush=True)
@@ -172,6 +219,18 @@ def _apply_update_scripts_if_needed(db: Session, existing_tables: set[str]) -> N
             print(f"Skipping sql_code_02.sql: file not found at {sql_02}", flush=True)
     else:
         print("sql_code_02.sql already applied.", flush=True)
+
+    # Normalize taxonomy and enrich book metadata for reliable filtering.
+    sql_03 = _sql_run_03_path()
+    if not sql_03.exists():
+        print(f"Skipping sql_code_03.sql: file not found at {sql_03}", flush=True)
+        return
+
+    if _needs_sql_03(db):
+        _execute_sql_file(db, sql_03)
+        print("sql_code_03.sql executed successfully.", flush=True)
+    else:
+        print("sql_code_03.sql already applied.", flush=True)
 
 def ensure_schema_and_seed(db: Session) -> None:
     existing = _existing_public_tables(db)

@@ -189,6 +189,30 @@ Query params:
 - `q` (string, required)
 - `threshold` (float, 0.0–1.0, default 0.1)
 - `limit` (int, 1–200, default 50)
+- `min_price` (float, optional)
+- `max_price` (float, optional)
+- `product_types` (comma-separated enum values: `BOOK`, `STATIONERY`, `ELECTRONICS`, `GIFT`, `OTHER`)
+- `brand` (string, optional, contains match)
+- `author` (string, optional, contains match on `book_details.author`)
+- `publisher` (string, optional, contains match on `book_details.publisher`)
+- `sort_by` (`relevance` | `price` | `name`, default `relevance`)
+- `sort_order` (`asc` | `desc`, default `desc`)
+
+Notes:
+- If threshold filtering would produce 0 rows, the API returns top ranked rows with `source = db_fallback`.
+- Search candidate text includes product name + brand + author + publisher + category to improve matching.
+
+### GET /search/filters
+Returns available filter choices for frontend controls.
+
+Auth: not required
+
+Response includes:
+- `product_types` (distinct product types)
+- `brands` (up to 100 distinct brands)
+- `authors` (up to 100 distinct book authors)
+- `publishers` (up to 100 distinct publishers)
+- `price_range` (`min`, `max`)
 
 ### GET /search/history
 Returns the current user’s search history.

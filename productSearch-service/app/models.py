@@ -21,6 +21,25 @@ class Product(Base):
     product_type = Column(String, nullable=False, index=True)
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    category_id = Column(Integer, primary_key=True, index=True)
+    category_name = Column(String, nullable=False, unique=True, index=True)
+
+
+class BookDetail(Base):
+    __tablename__ = "book_details"
+
+    product_id = Column(Integer, ForeignKey("products.product_id"), primary_key=True, index=True)
+    isbn = Column(String)
+    author = Column(String, index=True)
+    publisher = Column(String, index=True)
+    language = Column(String)
+    num_pages = Column(Integer)
+    edition = Column(String)
+
+
 class SearchHistory(Base):
     __tablename__ = "search_history"
 

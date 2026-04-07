@@ -6,15 +6,22 @@ body {
   margin: 0;
   font-family: Arial, sans-serif;
   background: #f3f4f6;
+  padding-top: 116px;
 }
 
 /* Header */
 .header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
   padding: 14px 28px;
   background: white;
   display: flex;
   justify-content: space-between;
   border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }
 
 .logo img {
@@ -30,7 +37,7 @@ body {
 
 /* Page */
 .page {
-  min-height: calc(100vh - 70px);
+  min-height: calc(100vh - 116px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -166,6 +173,11 @@ h2 {
 }
 
 .category-bar {
+  position: fixed;
+  top: 72px;
+  left: 0;
+  right: 0;
+  z-index: 999;
   display: flex;
   gap: 24px;
   padding: 12px 28px;
@@ -174,6 +186,27 @@ h2 {
   font-size: 14px;
   color: #374151;
   overflow-x: auto;
+}
+
+.banner-section {
+  background: #f9fafb;
+  padding: 20px 0;
+}
+
+.banner-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.banner-image {
+  width: 100%;
+  max-width: 1000px;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .home-page {

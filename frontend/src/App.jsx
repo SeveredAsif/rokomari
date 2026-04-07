@@ -4,15 +4,16 @@ import { useAuth } from "./hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import SearchPage from "./pages/SearchPage";
+import BookDetailPage from "./pages/BookDetailPage";
 
 export default function App() {
   const { token, user, login, logout } = useAuth();
 
   const [showAuth, setShowAuth] = useState(false);
-
-  // 🔥 NEW
   const [page, setPage] = useState("home");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [sourcePageBeforeBook, setSourcePageBeforeBook] = useState("home");
 
   const handleLoginRequest = () => setShowAuth(true);
   const handleCloseAuth = () => setShowAuth(false);
@@ -22,7 +23,6 @@ export default function App() {
     setShowAuth(false);
   };
 
-  // 🔥 HANDLE SEARCH NAVIGATION
   const handleSearch = (q) => {
     setSearchQuery(q);
     setPage("search");
@@ -32,9 +32,34 @@ export default function App() {
     setPage("home");
   };
 
+  const handleBookClick = (book) => {
+    setSelectedBook(book);
+    setSourcePageBeforeBook(page);
+    setPage("book-detail");
+  };
+
+  const handleBackFromBook = () => {
+    setPage(sourcePageBeforeBook);
+    setSelectedBook(null);
+  };
+
   // 🔐 Auth page
   if (showAuth && !user) {
     return <AuthPage onLogin={handleLogin} onClose={handleCloseAuth} />;
+  }
+
+  // 📖 Book detail page
+  if (page === "book-detail") {
+    return (
+      <BookDetailPage
+        book={selectedBook}
+        user={user}
+        token={token}
+        onLogout={logout}
+        onRequestLogin={handleLoginRequest}
+        onGoBack={handleBackFromBook}
+      />
+    );
   }
 
   // 🔍 Search page
@@ -47,6 +72,7 @@ export default function App() {
         onLogout={logout}
         onRequestLogin={handleLoginRequest}
         onBackToHome={handleBackToHome}
+        onBookClick={handleBookClick}
       />
     );
   }
@@ -58,7 +84,8 @@ export default function App() {
       token={token}
       onLogout={logout}
       onRequestLogin={handleLoginRequest}
-      onSearch={handleSearch} // 🔥 IMPORTANT
+      onSearch={handleSearch}
+      onBookClick={handleBookClick}
     />
   );
 }

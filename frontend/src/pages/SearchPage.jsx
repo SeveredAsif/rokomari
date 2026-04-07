@@ -3,7 +3,7 @@ import Header from "../components/Header";
 import ProductGrid from "../components/ProductGrid";
 import { searchProducts } from "../services/api";
 
-export default function SearchPage({ user, searchQuery, token, onLogout, onRequestLogin, onBackToHome }) {
+export default function SearchPage({ user, searchQuery, token, onLogout, onRequestLogin, onBackToHome, onBookClick }) {
   const [products, setProducts] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -66,7 +66,7 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
           </div>
         </section>
 
-        <ProductGrid products={products} sectionTitle={`Search Results for "${searchQuery}"`} searchError={searchError} />
+        <ProductGrid products={products} sectionTitle={`Search Results for "${searchQuery}"`} searchError={searchError} onBookClick={onBookClick} />
       </main>
     </div>
   );

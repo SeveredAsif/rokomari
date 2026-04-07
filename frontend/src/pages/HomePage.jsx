@@ -20,7 +20,7 @@ const DEFAULT_PRODUCTS = [
   { id: 6, title: "Men are from Mars, Women are from Venus", author: "John Gray", price: "৳480", image: "/src/assets/books/mars-venus.jpg" },
 ];
 
-export default function HomePage({ user, token, onLogout, onRequestLogin, onSearch }) {
+export default function HomePage({ user, token, onLogout, onRequestLogin, onSearch, onBookClick }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [sectionTitle, setSectionTitle] = useState("Popular Books");
@@ -144,6 +144,7 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
             products={products}
             sectionTitle={sectionTitle}
             searchError={searchError}
+            onBookClick={onBookClick}
         />
 
         {/* 🔥 ONLY show these when NOT searching */}
@@ -153,6 +154,7 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
               products={popularProducts}
               isLoading={isLoadingPopular}
               error={popularError}
+              onBookClick={onBookClick}
             />
             <TrendingSection
               searches={trendingSearches}

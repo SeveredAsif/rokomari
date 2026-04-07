@@ -1,32 +1,34 @@
-export default function PopularSection({ products, isLoading, error }) {
+export default function ProductGrid({ products, sectionTitle, searchError, onBookClick }) {
   return (
-    <section className="api-section">
+    <section className="search-section">
       <div className="section-header">
-        <h3>Popular Recommendations (API)</h3>
+        <h3>{sectionTitle}</h3>
       </div>
 
-      {isLoading && <p className="info-text">Loading API recommendations...</p>}
-      {error && <p className="search-error">{error}</p>}
+      {searchError && <p className="search-error">{searchError}</p>}
 
-      {!isLoading && !error && (
+      {products.length > 0 ? (
         <section className="product-grid">
-          {products.length > 0 ? (
-            products.map((item) => (
-              <div className="product-card" key={`api-${item.id}`}>
-                <div className="product-thumb">
-                  <img src={item.image} alt={item.title} />
-                </div>
-                <h4>{item.title}</h4>
-                <p>{item.author}</p>
-                <strong className="product-price">{item.price}</strong>
-                <p className="meta-text">{item.category}</p>
-                <p className="meta-text">Visits: {item.visitCount}</p>
+          {products.map((item) => (
+            <div 
+              className="product-card" 
+              key={item.id}
+              onClick={() => onBookClick && onBookClick(item)}
+              style={{ cursor: "pointer" }}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="product-thumb">
+                <img src={item.image} alt={item.title} />
               </div>
-            ))
-          ) : (
-            <p className="info-text">No API recommendations found.</p>
-          )}
+              <h4>{item.title}</h4>
+              <p>{item.author}</p>
+              <strong className="product-price">{item.price}</strong>
+            </div>
+          ))}
         </section>
+      ) : (
+        <p className="info-text">No products found.</p>
       )}
     </section>
   );

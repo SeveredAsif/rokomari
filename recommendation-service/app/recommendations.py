@@ -20,7 +20,7 @@ This is a common pattern called "candidate generation + ranking" in recommendati
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.database import get_db
 from app.auth import verify_jwt
@@ -68,13 +68,152 @@ def _all_products_as_dicts(db: Session) -> list[dict]:
             "id":          p.product_id,
             "name":        p.product_name,
             "description": p.description,
-            "author":      None,
-            "category":    None,
+            "author":      p.brand,
+            "category":    p.product_type,
+            "product_type": p.product_type,
             "price":       float(p.price) if p.price is not None else None,
             "image_url":   p.image_url,
         }
         for p in products
     ]
+
+
+def _global_visit_counts(db: Session) -> dict[int, int]:
+    rows = (
+        db.query(
+            models.ProductVisit.product_id,
+            func.count(models.ProductVisit.visit_id).label("visit_count"),
+        )
+        .group_by(models.ProductVisit.product_id)
+        .all()
+    )
+    return {row.product_id: int(row.visit_count) for row in rows}
+
+
+def _search_match_counts(db: Session, user_id: int | None = None) -> dict[int, int]:
+    user_filter = "WHERE sh.user_id = :user_id" if user_id is not None else ""
+    params = {"user_id": user_id} if user_id is not None else {}
+
+    rows = db.execute(
+        text(
+            f"""
+            SELECT p.product_id, COUNT(sh.search_id) AS search_count
+            FROM products p
+            JOIN search_history sh
+              ON (
+                LOWER(p.product_name) LIKE ('%' || LOWER(TRIM(sh.searched_keyword)) || '%')
+                OR LOWER(COALESCE(p.brand, '')) LIKE ('%' || LOWER(TRIM(sh.searched_keyword)) || '%')
+                OR LOWER(p.product_type) = LOWER(TRIM(sh.searched_keyword))
+              )
+            {user_filter}
+            GROUP BY p.product_id
+            """
+        ),
+        params,
+    ).fetchall()
+
+    return {row.product_id: int(row.search_count) for row in rows}
+
+
+def _user_preference_type_scores(db: Session, user_id: int) -> dict[str, float]:
+    visit_type_rows = (
+        db.query(
+            models.Product.product_type,
+            func.count(models.ProductVisit.visit_id).label("visit_count"),
+        )
+        .join(models.ProductVisit, models.ProductVisit.product_id == models.Product.product_id)
+        .filter(models.ProductVisit.user_id == user_id)
+        .group_by(models.Product.product_type)
+        .all()
+    )
+
+    search_type_rows = db.execute(
+        text(
+            """
+            SELECT p.product_type, COUNT(sh.search_id) AS search_count
+            FROM products p
+            JOIN search_history sh
+              ON (
+                LOWER(p.product_name) LIKE ('%' || LOWER(TRIM(sh.searched_keyword)) || '%')
+                OR LOWER(COALESCE(p.brand, '')) LIKE ('%' || LOWER(TRIM(sh.searched_keyword)) || '%')
+                OR LOWER(p.product_type) = LOWER(TRIM(sh.searched_keyword))
+              )
+            WHERE sh.user_id = :user_id
+            GROUP BY p.product_type
+            """
+        ),
+        {"user_id": user_id},
+    ).fetchall()
+
+    type_scores: dict[str, float] = {}
+
+    for row in visit_type_rows:
+        type_scores[row.product_type] = type_scores.get(row.product_type, 0.0) + float(row.visit_count)
+
+    for row in search_type_rows:
+        type_scores[row.product_type] = type_scores.get(row.product_type, 0.0) + (0.7 * float(row.search_count))
+
+    return type_scores
+
+
+def _product_dict(p: models.Product) -> dict:
+    return {
+        "id": p.product_id,
+        "name": p.product_name,
+        "description": p.description,
+        "author": p.brand,
+        "category": p.product_type,
+        "product_type": p.product_type,
+        "price": float(p.price) if p.price is not None else None,
+        "image_url": p.image_url,
+    }
+
+
+def _build_popularity_results(
+    db: Session,
+    product_ids: set[int],
+    visit_counts: dict[int, int],
+    search_counts: dict[int, int],
+    type_boosts: dict[str, float] | None = None,
+) -> list[dict]:
+    if not product_ids:
+        return []
+
+    products = (
+        db.query(models.Product)
+        .filter(models.Product.product_id.in_(list(product_ids)))
+        .all()
+    )
+
+    results: list[dict] = []
+    for product in products:
+        visit_count = visit_counts.get(product.product_id, 0)
+        search_count = search_counts.get(product.product_id, 0)
+        type_boost = (type_boosts or {}).get(product.product_type, 0.0)
+
+        popularity_score = (1.0 * visit_count) + (0.7 * search_count) + type_boost
+        if popularity_score <= 0:
+            continue
+
+        item = _product_dict(product)
+        item.update(
+            {
+                "visit_count": visit_count,
+                "search_count": search_count,
+                "popularity_score": round(popularity_score, 3),
+            }
+        )
+        results.append(item)
+
+    results.sort(
+        key=lambda x: (
+            x["popularity_score"],
+            x["visit_count"],
+            x["search_count"],
+        ),
+        reverse=True,
+    )
+    return results
 
 
 def _merge_results(*result_lists) -> list[dict]:
@@ -233,52 +372,97 @@ def get_popular_products(
 
     GET /recommendations/popular
     """
-    cache_key = "recommendations:popular"
+    cache_key = "recommendations:popular:v2"
     cached = cache_get(cache_key)
     if cached is not None:
-        return {"source": "cache", "results": cached[:limit]}
+        final = cached[:limit]
+        return {"source": "cache", "count": len(final), "results": final}
 
-    # Count product_visits per product_id, order by count descending
-    # This is like:  SELECT product_id, COUNT(*) as visits FROM product_visits GROUP BY product_id ORDER BY visits DESC
-    popular_rows = (
-        db.query(
-            models.ProductVisit.product_id,
-            func.count(models.ProductVisit.visit_id).label("visit_count")
-        )
-        .group_by(models.ProductVisit.product_id)
-        .order_by(func.count(models.ProductVisit.visit_id).desc())
-        .limit(limit)
-        .all()
+    visit_counts = _global_visit_counts(db)
+    search_counts = _search_match_counts(db)
+    candidate_ids = set(visit_counts.keys()) | set(search_counts.keys())
+    results = _build_popularity_results(
+        db=db,
+        product_ids=candidate_ids,
+        visit_counts=visit_counts,
+        search_counts=search_counts,
     )
-
-    popular_ids = [row.product_id for row in popular_rows]
-    visit_counts = {row.product_id: row.visit_count for row in popular_rows}
-
-    # Fetch full product details for those IDs
-    products = (
-        db.query(models.Product)
-        .filter(models.Product.product_id.in_(popular_ids))
-        .all()
-    )
-
-    results = [
-        {
-            "id":          p.product_id,
-            "name":        p.product_name,
-            "description": p.description,
-            "author":      None,
-            "category":    None,
-            "price":       float(p.price) if p.price is not None else None,
-            "image_url":   p.image_url,
-            "visit_count": visit_counts.get(p.product_id, 0),
-        }
-        for p in products
-    ]
-
-    # Sort to preserve original order (DB IN clause doesn't guarantee order)
-    results.sort(key=lambda x: x["visit_count"], reverse=True)
 
     # Cache popular for longer — it changes slowly (15 minutes)
     cache_set(cache_key, results, ttl_seconds=900)
 
-    return {"source": "db", "count": len(results), "results": results}
+    final = results[:limit]
+    return {"source": "db", "count": len(final), "results": final}
+
+
+@router.get("/personalized")
+def get_personalized_popular_products(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_jwt),
+):
+    """
+    Personalized recommendations based on the product TYPES
+    that this user mostly searched and visited.
+    """
+    user_id = _resolve_user_id(db, current_user.get("sub"))
+    cache_key = f"recommendations:personalized-type:{user_id}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return {
+            "source": "cache",
+            "user_id": user_id,
+            "preferred_types": cached.get("preferred_types", []),
+            "results": cached.get("results", [])[:limit],
+            "count": len(cached.get("results", [])[:limit]),
+        }
+
+    type_scores = _user_preference_type_scores(db, user_id)
+    sorted_type_scores = sorted(type_scores.items(), key=lambda item: item[1], reverse=True)
+    preferred_types = [item[0] for item in sorted_type_scores[:2]]
+
+    visit_counts = _global_visit_counts(db)
+    search_counts = _search_match_counts(db)
+
+    if preferred_types:
+        type_boosts = {ptype: score * 1.5 for ptype, score in sorted_type_scores[:2]}
+        type_products = (
+            db.query(models.Product.product_id)
+            .filter(models.Product.product_type.in_(preferred_types))
+            .all()
+        )
+        candidate_ids = {row.product_id for row in type_products}
+
+        results = _build_popularity_results(
+            db=db,
+            product_ids=candidate_ids,
+            visit_counts=visit_counts,
+            search_counts=search_counts,
+            type_boosts=type_boosts,
+        )
+    else:
+        results = []
+
+    if not results:
+        fallback_ids = set(visit_counts.keys()) | set(search_counts.keys())
+        results = _build_popularity_results(
+            db=db,
+            product_ids=fallback_ids,
+            visit_counts=visit_counts,
+            search_counts=search_counts,
+        )
+
+    payload = {
+        "preferred_types": preferred_types,
+        "results": results,
+    }
+    cache_set(cache_key, payload, ttl_seconds=300)
+
+    final = results[:limit]
+    return {
+        "source": "db",
+        "user_id": user_id,
+        "preferred_types": preferred_types,
+        "count": len(final),
+        "results": final,
+    }

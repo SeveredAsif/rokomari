@@ -1,6 +1,20 @@
+import { useEffect } from "react";
 import Header from "../components/Header";
+import { recordProductVisit } from "../services/api";
 
 export default function BookDetailPage({ book, user, token, onLogout, onRequestLogin, onGoBack }) {
+  useEffect(() => {
+    if (!token || !book?.id) {
+      return;
+    }
+
+    recordProductVisit(book.id, token).catch((err) => {
+      if (err?.status === 401) {
+        onLogout();
+      }
+    });
+  }, [book?.id, token, onLogout]);
+
   if (!book) {
     return <div className="page"><p>Book not found</p></div>;
   }

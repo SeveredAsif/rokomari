@@ -41,6 +41,49 @@ export async function fetchPopularRecommendations() {
   return resp.json();
 }
 
+export async function fetchPersonalizedRecommendations(token) {
+  if (!token) {
+    return { results: [] };
+  }
+
+  const resp = await fetch("/recommendation/recommendations/personalized?limit=6", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 401) {
+      throw Object.assign(new Error("Session expired. Please login again."), { status: 401 });
+    }
+    throw new Error(await getErrorMessage(resp, "Failed to load personalized recommendations"));
+  }
+
+  return resp.json();
+}
+
+export async function recordProductVisit(productId, token) {
+  if (!token || !productId) {
+    return { skipped: true };
+  }
+
+  const resp = await fetch("/interaction/me/product-visit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ product_id: productId }),
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 401) {
+      throw Object.assign(new Error("Session expired. Please login again."), { status: 401 });
+    }
+    throw new Error(await getErrorMessage(resp, "Failed to record product visit"));
+  }
+
+  return resp.json();
+}
+
 export async function fetchTrendingSearches() {
   const resp = await fetch("/productsearch/search/trending?limit=8");
   if (!resp.ok) throw new Error(await getErrorMessage(resp, "Failed to load trending searches"));

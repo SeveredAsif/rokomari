@@ -202,6 +202,16 @@ def ensure_product_exists(db: Session, product_id: int) -> None:
         raise HTTPException(status_code=404, detail=f"Product not found: {product_id}")
 
 
+def _get_product_visit_count(db: Session, product_id: int) -> int:
+    return (
+        db.execute(
+            text("SELECT COUNT(*) FROM product_visits WHERE product_id = :product_id"),
+            {"product_id": product_id},
+        ).scalar()
+        or 0
+    )
+
+
 @app.get("/")
 def root() -> dict[str, str]:
     return {"message": "Interaction service is running"}
@@ -227,6 +237,7 @@ def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db
             "message": "Duplicate product visit (within cooldown period)",
             "user_id": payload.user_id,
             "product_id": payload.product_id,
+            "total_visits_for_product": _get_product_visit_count(db, payload.product_id),
             "skipped": True
         }
 
@@ -242,11 +253,14 @@ def add_product_visit(payload: ProductVisitRequest, db: Session = Depends(get_db
     ).fetchone()
     db.commit()
 
+    total_visits = _get_product_visit_count(db, payload.product_id)
+
     return {
         "visit_id": row.visit_id,
         "user_id": row.user_id,
         "product_id": row.product_id,
         "visited_at": row.visited_at,
+        "total_visits_for_product": total_visits,
         "skipped": False
     }
 
@@ -308,6 +322,7 @@ def add_product_visit_jwt(
             "message": "Duplicate product visit (within cooldown period)",
             "user_id": user_id,
             "product_id": payload.product_id,
+            "total_visits_for_product": _get_product_visit_count(db, payload.product_id),
             "skipped": True
         }
 
@@ -323,11 +338,14 @@ def add_product_visit_jwt(
     ).fetchone()
     db.commit()
 
+    total_visits = _get_product_visit_count(db, payload.product_id)
+
     return {
         "visit_id": row.visit_id,
         "user_id": row.user_id,
         "product_id": row.product_id,
         "visited_at": row.visited_at,
+        "total_visits_for_product": total_visits,
         "skipped": False
     }
 

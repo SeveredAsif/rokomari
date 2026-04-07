@@ -6,9 +6,9 @@ import TrendingSection from "../components/TrendingSection";
 import HistorySection from "../components/HistorySection";
 import {
   fetchPopularRecommendations,
+  fetchPersonalizedRecommendations,
   fetchTrendingSearches,
   fetchSearchHistory,
-  searchProducts,
 } from "../services/api";
 
 const DEFAULT_PRODUCTS = [
@@ -27,9 +27,14 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
 
-  const [popularProducts, setPopularProducts] = useState([]);
-  const [popularError, setPopularError] = useState("");
-  const [isLoadingPopular, setIsLoadingPopular] = useState(false);
+  const [genericProducts, setGenericProducts] = useState([]);
+  const [genericError, setGenericError] = useState("");
+  const [isLoadingGeneric, setIsLoadingGeneric] = useState(false);
+
+  const [personalizedProducts, setPersonalizedProducts] = useState([]);
+  const [personalizedError, setPersonalizedError] = useState("");
+  const [isLoadingPersonalized, setIsLoadingPersonalized] = useState(false);
+  const [preferredTypes, setPreferredTypes] = useState([]);
 
   const [trendingSearches, setTrendingSearches] = useState([]);
   const [trendingError, setTrendingError] = useState("");
@@ -39,26 +44,54 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
   const [historyError, setHistoryError] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  const loadPopular = async () => {
-    setIsLoadingPopular(true);
-    setPopularError("");
+  const mapRecommendationProducts = (items) =>
+    (items || []).map((item) => ({
+      id: item.id,
+      title: item.name || "Unnamed Product",
+      author: item.author || "Unknown Author",
+      category: item.category || item.product_type || "Unknown Category",
+      price: item.price != null ? `৳${item.price}` : "N/A",
+      image: item.image_url || "/src/assets/books/atomic-habits.jpg",
+      visitCount: item.visit_count ?? 0,
+      searchCount: item.search_count ?? 0,
+      popularityScore: item.popularity_score ?? null,
+    }));
+
+  const loadGenericRecommendations = async () => {
+    setIsLoadingGeneric(true);
+    setGenericError("");
     try {
       const data = await fetchPopularRecommendations();
-      setPopularProducts(
-        (data.results || []).map((item) => ({
-          id: item.id,
-          title: item.name || "Unnamed Product",
-          author: item.author || "Unknown Author",
-          category: item.category || "Unknown Category",
-          price: item.price != null ? `৳${item.price}` : "N/A",
-          image: item.image_url || "/src/assets/books/atomic-habits.jpg",
-          visitCount: item.visit_count ?? 0,
-        }))
-      );
+      setGenericProducts(mapRecommendationProducts(data.results));
     } catch (err) {
-      setPopularError(err.message);
+      setGenericError(err.message);
     } finally {
-      setIsLoadingPopular(false);
+      setIsLoadingGeneric(false);
+    }
+  };
+
+  const loadPersonalizedRecommendations = async () => {
+    if (!token) {
+      setPersonalizedProducts([]);
+      setPreferredTypes([]);
+      setPersonalizedError("");
+      return;
+    }
+
+    setIsLoadingPersonalized(true);
+    setPersonalizedError("");
+    try {
+      const data = await fetchPersonalizedRecommendations(token);
+      setPreferredTypes(data.preferred_types || []);
+      setPersonalizedProducts(mapRecommendationProducts(data.results));
+    } catch (err) {
+      if (err.status === 401) {
+        onLogout();
+        return;
+      }
+      setPersonalizedError(err.message);
+    } finally {
+      setIsLoadingPersonalized(false);
     }
   };
 
@@ -98,15 +131,20 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
   };
 
   useEffect(() => {
-    loadPopular();
+    loadGenericRecommendations();
     loadTrending();
-    loadHistory();
   }, []);
 
   useEffect(() => {
     if (!token) {
       setSearchHistory([]);
+      setPersonalizedProducts([]);
+      setPreferredTypes([]);
+      return;
     }
+
+    loadHistory();
+    loadPersonalizedRecommendations();
   }, [token]);
 
   const heroTitle = user ? `Welcome back, ${user.full_name || "Reader"}` : "Welcome to Rokomari";
@@ -151,9 +189,34 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
         {sectionTitle === "Popular Books" && (
           <>
             <PopularSection
-              products={popularProducts}
-              isLoading={isLoadingPopular}
-              error={popularError}
+              title="Generic Recommendations"
+              subtitle="Popular across all users based on both visits and searches."
+              products={genericProducts}
+              isLoading={isLoadingGeneric}
+              error={genericError}
+              emptyMessage="No global recommendation data yet."
+              onBookClick={onBookClick}
+            />
+
+            <PopularSection
+              title="Personalized Recommendations"
+              subtitle={
+                user
+                  ? (
+                      preferredTypes.length > 0
+                        ? `Based on your top interaction types: ${preferredTypes.join(", ")}`
+                        : "Based on your search and visit behavior."
+                    )
+                  : "Login to get recommendations tailored to your activity."
+              }
+              products={personalizedProducts}
+              isLoading={isLoadingPersonalized}
+              error={personalizedError}
+              emptyMessage={
+                user
+                  ? "No personalized signals yet. Browse and search a bit to personalize this section."
+                  : "Login to see personalized recommendations."
+              }
               onBookClick={onBookClick}
             />
             <TrendingSection

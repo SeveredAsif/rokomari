@@ -150,9 +150,20 @@ Query params:
 - `threshold` (float, 0.0–1.0, default 0.1)
 
 ### GET /recommendations/popular
-Returns the most visited products across all users.
+Returns generic recommendations across all users by combining:
+- global product visits
+- global keyword searches matched against products
 
 Auth: not required
+
+Query params:
+- `limit` (int, 1–50, default 10)
+
+### GET /recommendations/personalized
+Returns personalized recommendations for the logged-in user based on the product types
+they mostly searched and visited.
+
+Auth: required
 
 Query params:
 - `limit` (int, 1–50, default 10)
@@ -259,6 +270,18 @@ Request body:
 ```
 
 Legacy alias (still supported): `POST /interactions/product-visit`
+
+### POST /me/product-visit
+JWT-authenticated product visit endpoint.
+
+Request body:
+```json
+{ "product_id": 20 }
+```
+
+Notes:
+- The service resolves `user_id` from JWT (`sub` claim).
+- Response includes `total_visits_for_product` so the incremented visit count is visible.
 
 ### POST /search
 Records a user search keyword.

@@ -12,6 +12,7 @@ export default function Header({
   onRequestLogin,
   onGoHome,
   onBookClick, // 🔥 IMPORTANT
+  enableSuggestions = true,
 }) {
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -23,7 +24,7 @@ export default function Header({
 
   // 🔥 AUTOCOMPLETE
   useEffect(() => {
-    if (!searchQuery.trim() || disableDropdown){
+    if (!enableSuggestions || !searchQuery.trim() || disableDropdown){
       setSuggestions([]);
       setShowDropdown(false);
       return;
@@ -49,7 +50,7 @@ export default function Header({
     }, 300);
 
     return () => clearTimeout(debounceRef.current);
-  }, [searchQuery]);
+  }, [searchQuery, disableDropdown, enableSuggestions]);
 
   // 🔥 CLICK OUTSIDE
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function Header({
               placeholder="Search by title, author or keyword"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => suggestions.length && setShowDropdown(true)}
+              onFocus={() => enableSuggestions && suggestions.length && setShowDropdown(true)}
             />
 
             <button
@@ -109,7 +110,7 @@ export default function Header({
           </form>
 
           {/* DROPDOWN */}
-          {showDropdown && (
+          {enableSuggestions && showDropdown && (
             <div className="search-dropdown">
               {loading ? (
                 <div className="dropdown-item">Loading...</div>
@@ -123,17 +124,19 @@ export default function Header({
                     onClick={() => {
                     setDisableDropdown(true);   // 🔥 prevent reopen
                       // 🔥 NAVIGATE TO DETAIL PAGE
-                      onBookClick({
-                        id: item.id,
-                        title: item.name,
-                        author: item.author || item.brand || "Unknown",
-                        publisher: item.publisher,
-                        category: item.category || item.product_type,
-                        price:
-                          item.price != null ? `৳${item.price}` : "N/A",
-                        image:
-                          item.image_url || "/placeholder.jpg",
-                      });
+                      if (onBookClick) {
+                        onBookClick({
+                          id: item.id,
+                          title: item.name,
+                          author: item.author || item.brand || "Unknown",
+                          publisher: item.publisher,
+                          category: item.category || item.product_type,
+                          price:
+                            item.price != null ? `৳${item.price}` : "N/A",
+                          image:
+                            item.image_url || "/placeholder.jpg",
+                        });
+                      }
                       setShowDropdown(false);
 
                       setTimeout(() => {

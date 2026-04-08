@@ -190,6 +190,7 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
         onLogout={onLogout}
         onRequestLogin={onRequestLogin}
         onGoHome={() => {}} // No-op on home page
+        onBookClick={onBookClick}
       />
 
       <main className="home-page">

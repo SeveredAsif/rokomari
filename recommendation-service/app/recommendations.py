@@ -34,6 +34,10 @@ router = APIRouter(prefix="/recommendations", tags=["Recommendations"])
 SIGNAL_LIMIT = 20    # fetch up to 20 candidates per signal before similarity
 FINAL_LIMIT  = 10    # return top 10 merged recommendations
 
+# Personalized ranking weights from user-only behavior signals.
+PERSONALIZED_VISIT_SIGNAL_WEIGHT = 2.20
+PERSONALIZED_SEARCH_SIGNAL_WEIGHT = 3.60
+
 
 def _resolve_user_id(db: Session, principal: str | int | None) -> int:
     """
@@ -90,6 +94,19 @@ def _global_visit_counts(db: Session) -> dict[int, int]:
     return {row.product_id: int(row.visit_count) for row in rows}
 
 
+def _user_visit_counts(db: Session, user_id: int) -> dict[int, int]:
+    rows = (
+        db.query(
+            models.ProductVisit.product_id,
+            func.count(models.ProductVisit.visit_id).label("visit_count"),
+        )
+        .filter(models.ProductVisit.user_id == user_id)
+        .group_by(models.ProductVisit.product_id)
+        .all()
+    )
+    return {row.product_id: int(row.visit_count) for row in rows}
+
+
 def _search_match_counts(db: Session, user_id: int | None = None) -> dict[int, int]:
     user_filter = "WHERE sh.user_id = :user_id" if user_id is not None else ""
     params = {"user_id": user_id} if user_id is not None else {}
@@ -113,6 +130,38 @@ def _search_match_counts(db: Session, user_id: int | None = None) -> dict[int, i
     ).fetchall()
 
     return {row.product_id: int(row.search_count) for row in rows}
+
+
+def _user_signal_fingerprint(db: Session, user_id: int) -> str:
+    visit_stats = db.execute(
+        text(
+            """
+            SELECT
+                COALESCE(EXTRACT(EPOCH FROM MAX(visited_at))::BIGINT, 0) AS max_ts,
+                COUNT(*) AS total_count
+            FROM product_visits
+            WHERE user_id = :user_id
+            """
+        ),
+        {"user_id": user_id},
+    ).fetchone()
+
+    search_stats = db.execute(
+        text(
+            """
+            SELECT
+                COALESCE(EXTRACT(EPOCH FROM MAX(searched_at))::BIGINT, 0) AS max_ts,
+                COUNT(*) AS total_count
+            FROM search_history
+            WHERE user_id = :user_id
+            """
+        ),
+        {"user_id": user_id},
+    ).fetchone()
+
+    visit_part = f"v{int(visit_stats.max_ts)}-{int(visit_stats.total_count)}"
+    search_part = f"s{int(search_stats.max_ts)}-{int(search_stats.total_count)}"
+    return f"{visit_part}:{search_part}"
 
 
 def _user_preference_type_scores(db: Session, user_id: int) -> dict[str, float]:
@@ -148,10 +197,10 @@ def _user_preference_type_scores(db: Session, user_id: int) -> dict[str, float]:
     type_scores: dict[str, float] = {}
 
     for row in visit_type_rows:
-        type_scores[row.product_type] = type_scores.get(row.product_type, 0.0) + float(row.visit_count)
+        type_scores[row.product_type] = type_scores.get(row.product_type, 0.0) + (2.0 * float(row.visit_count))
 
     for row in search_type_rows:
-        type_scores[row.product_type] = type_scores.get(row.product_type, 0.0) + (0.7 * float(row.search_count))
+        type_scores[row.product_type] = type_scores.get(row.product_type, 0.0) + (3.0 * float(row.search_count))
 
     return type_scores
 
@@ -175,6 +224,12 @@ def _build_popularity_results(
     visit_counts: dict[int, int],
     search_counts: dict[int, int],
     type_boosts: dict[str, float] | None = None,
+    global_visit_weight: float = 1.0,
+    global_search_weight: float = 0.7,
+    user_visit_counts: dict[int, int] | None = None,
+    user_search_counts: dict[int, int] | None = None,
+    user_visit_weight: float = 0.0,
+    user_search_weight: float = 0.0,
 ) -> list[dict]:
     if not product_ids:
         return []
@@ -189,9 +244,17 @@ def _build_popularity_results(
     for product in products:
         visit_count = visit_counts.get(product.product_id, 0)
         search_count = search_counts.get(product.product_id, 0)
+        user_visit_count = (user_visit_counts or {}).get(product.product_id, 0)
+        user_search_count = (user_search_counts or {}).get(product.product_id, 0)
         type_boost = (type_boosts or {}).get(product.product_type, 0.0)
 
-        popularity_score = (1.0 * visit_count) + (0.7 * search_count) + type_boost
+        popularity_score = (
+            (global_visit_weight * visit_count)
+            + (global_search_weight * search_count)
+            + (user_visit_weight * user_visit_count)
+            + (user_search_weight * user_search_count)
+            + type_boost
+        )
         if popularity_score <= 0:
             continue
 
@@ -200,6 +263,8 @@ def _build_popularity_results(
             {
                 "visit_count": visit_count,
                 "search_count": search_count,
+                "user_visit_count": user_visit_count,
+                "user_search_count": user_search_count,
                 "popularity_score": round(popularity_score, 3),
             }
         )
@@ -233,6 +298,24 @@ def _merge_results(*result_lists) -> list[dict]:
     merged = list(seen.values())
     merged.sort(key=lambda x: x["similarity_score"], reverse=True)
     return merged
+
+
+def _signal_counts_fingerprint(user_visit_counts: dict[int, int], user_search_counts: dict[int, int]) -> str:
+    visit_total = sum(user_visit_counts.values())
+    search_total = sum(user_search_counts.values())
+    return f"v{visit_total}-{len(user_visit_counts)}:s{search_total}-{len(user_search_counts)}"
+
+
+def _top_preferred_types_from_results(results: list[dict], top_n: int = 2) -> list[str]:
+    type_scores: dict[str, float] = {}
+    for item in results:
+        product_type = item.get("product_type")
+        if not product_type:
+            continue
+        type_scores[product_type] = type_scores.get(product_type, 0.0) + float(item.get("popularity_score", 0.0))
+
+    sorted_types = sorted(type_scores.items(), key=lambda x: x[1], reverse=True)
+    return [ptype for ptype, _ in sorted_types[:top_n]]
 
 
 @router.get("")
@@ -406,7 +489,13 @@ def get_personalized_popular_products(
     that this user mostly searched and visited.
     """
     user_id = _resolve_user_id(db, current_user.get("sub"))
-    cache_key = f"recommendations:personalized-type:{user_id}"
+
+    # User-only personalization signals (no global popularity blending).
+    user_visit_counts = _user_visit_counts(db, user_id)
+    user_search_counts = _search_match_counts(db, user_id=user_id)
+
+    signal_fingerprint = _signal_counts_fingerprint(user_visit_counts, user_search_counts)
+    cache_key = f"recommendations:personalized-type:{user_id}:{signal_fingerprint}"
     cached = cache_get(cache_key)
     if cached is not None:
         return {
@@ -417,40 +506,20 @@ def get_personalized_popular_products(
             "count": len(cached.get("results", [])[:limit]),
         }
 
-    type_scores = _user_preference_type_scores(db, user_id)
-    sorted_type_scores = sorted(type_scores.items(), key=lambda item: item[1], reverse=True)
-    preferred_types = [item[0] for item in sorted_type_scores[:2]]
-
-    visit_counts = _global_visit_counts(db)
-    search_counts = _search_match_counts(db)
-
-    if preferred_types:
-        type_boosts = {ptype: score * 1.5 for ptype, score in sorted_type_scores[:2]}
-        type_products = (
-            db.query(models.Product.product_id)
-            .filter(models.Product.product_type.in_(preferred_types))
-            .all()
-        )
-        candidate_ids = {row.product_id for row in type_products}
-
+    candidate_ids = set(user_visit_counts.keys()) | set(user_search_counts.keys())
+    if candidate_ids:
         results = _build_popularity_results(
             db=db,
             product_ids=candidate_ids,
-            visit_counts=visit_counts,
-            search_counts=search_counts,
-            type_boosts=type_boosts,
+            visit_counts=user_visit_counts,
+            search_counts=user_search_counts,
+            global_visit_weight=PERSONALIZED_VISIT_SIGNAL_WEIGHT,
+            global_search_weight=PERSONALIZED_SEARCH_SIGNAL_WEIGHT,
         )
     else:
         results = []
 
-    if not results:
-        fallback_ids = set(visit_counts.keys()) | set(search_counts.keys())
-        results = _build_popularity_results(
-            db=db,
-            product_ids=fallback_ids,
-            visit_counts=visit_counts,
-            search_counts=search_counts,
-        )
+    preferred_types = _top_preferred_types_from_results(results)
 
     payload = {
         "preferred_types": preferred_types,

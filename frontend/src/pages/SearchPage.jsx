@@ -13,7 +13,14 @@ const DEFAULT_FILTERS = {
   discountMin: "",
   discountMax: "",
   sortBy: "relevance",
-  sortOrder: "desc",
+};
+
+const SORT_PRESETS = {
+  relevance: { sortBy: "relevance", sortOrder: "desc" },
+  name_a_z: { sortBy: "name", sortOrder: "asc" },
+  name_z_a: { sortBy: "name", sortOrder: "desc" },
+  price_low_high: { sortBy: "price", sortOrder: "asc" },
+  price_high_low: { sortBy: "price", sortOrder: "desc" },
 };
 
 export default function SearchPage({ user, searchQuery, token, onLogout, onRequestLogin, onBackToHome, onBookClick }) {
@@ -60,18 +67,29 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
     loadFilters();
   }, [token, onLogout]);
 
-  const buildSearchOptions = (activeFilters) => ({
-    limit: 12,
-    threshold: 0.1,
-    minPrice: activeFilters.minPrice === "" ? undefined : Number(activeFilters.minPrice),
-    maxPrice: activeFilters.maxPrice === "" ? undefined : Number(activeFilters.maxPrice),
-    productTypes: activeFilters.productType || undefined,
-    brand: activeFilters.brand.trim() || undefined,
-    author: activeFilters.author.trim() || undefined,
-    publisher: activeFilters.publisher.trim() || undefined,
-    sortBy: activeFilters.sortBy,
-    sortOrder: activeFilters.sortOrder,
-  });
+  const buildSearchOptions = (activeFilters) => {
+    const sortPreset = SORT_PRESETS[activeFilters.sortBy] || SORT_PRESETS.relevance;
+
+    const minPrice = activeFilters.minPrice === "" ? undefined : Number(activeFilters.minPrice);
+    const maxPrice = activeFilters.maxPrice === "" ? undefined : Number(activeFilters.maxPrice);
+    const normalizedMinPrice =
+      minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice ? maxPrice : minPrice;
+    const normalizedMaxPrice =
+      minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice ? minPrice : maxPrice;
+
+    return {
+      limit: 12,
+      threshold: 0.1,
+      minPrice: normalizedMinPrice,
+      maxPrice: normalizedMaxPrice,
+      productTypes: activeFilters.productType || undefined,
+      brand: activeFilters.brand.trim() || undefined,
+      author: activeFilters.author.trim() || undefined,
+      publisher: activeFilters.publisher.trim() || undefined,
+      sortBy: sortPreset.sortBy,
+      sortOrder: sortPreset.sortOrder,
+    };
+  };
 
   useEffect(() => {
     if (searchQuery) {
@@ -163,23 +181,10 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
                   onChange={(e) => setFilters((prev) => ({ ...prev, sortBy: e.target.value }))}
                 >
                   <option value="relevance">Relevance</option>
-                  <option value="best_seller">Best Seller</option>
-                  <option value="new_released">New Released</option>
+                  <option value="name_a_z">Name - A to Z</option>
+                  <option value="name_z_a">Name - Z to A</option>
                   <option value="price_low_high">Price - Low to High</option>
                   <option value="price_high_low">Price - High to Low</option>
-                  <option value="discount_low_high">Discount - Low to High</option>
-                  <option value="discount_high_low">Discount - High to Low</option>
-                </select>
-              </label>
-
-              <label>
-                Sort Order
-                <select
-                  value={filters.sortOrder}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, sortOrder: e.target.value }))}
-                >
-                  <option value="desc">Descending</option>
-                  <option value="asc">Ascending</option>
                 </select>
               </label>
             </div>

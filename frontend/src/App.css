@@ -202,8 +202,23 @@ h2 {
 }
 
 .home-header {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(320px, 620px) minmax(180px, 1fr);
   gap: 20px;
   align-items: center;
+}
+
+.home-header .logo {
+  justify-self: start;
+}
+
+.home-header .search-container {
+  width: 100%;
+  justify-self: center;
+}
+
+.home-header .nav {
+  justify-self: end;
 }
 
 .search-bar {
@@ -245,6 +260,7 @@ h2 {
   right: 0;
   z-index: 999;
   display: flex;
+  justify-content: center;
   gap: 24px;
   padding: 12px 28px;
   background: white;
@@ -423,11 +439,20 @@ h2 {
   }
 
   .home-header {
+    display: flex;
     flex-wrap: wrap;
   }
 
-  .search-bar {
+  .home-header .search-container {
     order: 3;
+    width: 100%;
+  }
+
+  .home-header .nav {
+    justify-self: auto;
+  }
+
+  .search-bar {
     width: 100%;
     max-width: 100%;
   }

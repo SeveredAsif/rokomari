@@ -145,6 +145,8 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
         onLogout={onLogout}
         onRequestLogin={onRequestLogin}
         onGoHome={onBackToHome}
+        onBookClick={onBookClick} // 🔥 ADD THIS
+        enableSuggestions={false}
       />
 
       <div className="search-page-layout">

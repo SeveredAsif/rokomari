@@ -67,6 +67,7 @@ export default function BookDetailPage({
         onLogout={onLogout}
         onRequestLogin={onRequestLogin}
         onGoHome={onGoHome}
+        enableSuggestions={false}
       />
 
       <div className="home-page">

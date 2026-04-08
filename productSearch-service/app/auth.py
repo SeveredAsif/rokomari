@@ -78,6 +78,34 @@ def verify_jwt(
         )
 
 
+def verify_jwt_optional(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+) -> dict | None:
+    """
+    Optional JWT dependency.
+    - No token provided: returns None (anonymous request)
+    - Valid token provided: returns decoded payload
+    - Invalid token provided: raises 401
+    """
+    if not credentials:
+        return None
+
+    token = credentials.credentials
+    try:
+        decoded = jwt.decode(
+            token,
+            key=os.getenv("JWT_SECRET"),
+            algorithms=["HS256"],
+        )
+        return decoded
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 def verify_service_token(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 ) -> bool:

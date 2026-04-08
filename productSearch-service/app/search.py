@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from .database import get_db
-from .auth import verify_jwt
+from .auth import verify_jwt, verify_jwt_optional
 from .similarity import compute_cosine_similarities, filter_by_threshold, rank_by_similarity
 from .cache import cache_get, cache_set
 from . import models
@@ -56,7 +56,7 @@ def _normalize_product_types(raw_product_types: str | None) -> list[str]:
 
 def _build_cache_key(
     *,
-    user_id: int,
+    user_id: int | str,
     query: str,
     threshold: float,
     min_price: float | None,
@@ -117,12 +117,14 @@ def search_products(
     sort_by: str = Query("relevance", pattern="^(relevance|price|name)$", description="Sort field"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(verify_jwt),
+    current_user: dict | None = Depends(verify_jwt_optional),
 ):
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=400, detail="min_price cannot be greater than max_price")
 
-    user_id = _resolve_user_id(db, current_user.get("sub"))
+    user_id: int | None = None
+    if current_user is not None:
+        user_id = _resolve_user_id(db, current_user.get("sub"))
 
     normalized_q = q.lower().strip()
     normalized_brand = _normalize_optional(brand)
@@ -140,7 +142,7 @@ def search_products(
         )
 
     cache_key = _build_cache_key(
-        user_id=user_id,
+        user_id=user_id if user_id is not None else "anon",
         query=normalized_q,
         threshold=threshold,
         min_price=min_price,
@@ -262,17 +264,18 @@ def search_products(
 
     cache_set(cache_key, results, ttl_seconds=300)
 
-    try:
-        search_entry = models.SearchHistory(
-            user_id=user_id,
-            searched_keyword=normalized_q,
-            searched_at=datetime.utcnow(),
-        )
-        db.add(search_entry)
-        db.commit()
-    except Exception as e:
-        print(f"Warning: Could not record search history: {e}")
-        db.rollback()
+    if user_id is not None:
+        try:
+            search_entry = models.SearchHistory(
+                user_id=user_id,
+                searched_keyword=normalized_q,
+                searched_at=datetime.utcnow(),
+            )
+            db.add(search_entry)
+            db.commit()
+        except Exception as e:
+            print(f"Warning: Could not record search history: {e}")
+            db.rollback()
 
     return {
         "source": source,

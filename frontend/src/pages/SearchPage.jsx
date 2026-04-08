@@ -49,10 +49,11 @@ export default function SearchPage({ user, searchQuery, token, onLogout, onReque
           price_range: data.price_range || { min: null, max: null },
         });
       } catch (err) {
-        if (err.status === 401) {
+        if (err.status === 401 && token) {
           onLogout();
           return;
         }
+        // anonymous users can still search even if filters are unavailable.
       }
     };
 

@@ -38,12 +38,6 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
   const [historyError, setHistoryError] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  const [currentBanner, setCurrentBanner] = useState(0);
-
-  const banners = [
-    "https://rokbucket.rokomari.io/banner/DESKTOPe463d458-4443-485e-b9de-384ecb8d0ce2.webp",
-    "https://rokbucket.rokomari.io/banner/DESKTOP56335902-dbf4-48f6-b80e-84acd1b67d4f.webp"
-  ];
 
   
 
@@ -180,15 +174,7 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
     loadPersonalizedRecommendations();
   }, [token]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentBanner((prev) => (prev + 1) % banners.length);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const heroTitle = user ? `Welcome back, ${user.full_name || "Reader"}` : "Welcome to Rokomari";
+  const heroTitle = "Welcome to Rokomari";
   const heroSubtext = user
     ? "Browse books, search products, and enjoy your personalized homepage."
     : "Browse popular books, trending searches, and login to personalize your recommendations.";
@@ -205,17 +191,6 @@ export default function HomePage({ user, token, onLogout, onRequestLogin, onSear
         onRequestLogin={onRequestLogin}
         onGoHome={() => {}} // No-op on home page
       />
-
-      {/* Banner Section */}
-      <section className="banner-section">
-        <div className="banner-container">
-          <img
-            src={banners[currentBanner]}
-            alt={`Rokomari Banner ${currentBanner + 1}`}
-            className="banner-image"
-          />
-        </div>
-      </section>
 
       <main className="home-page">
         <section className="hero-banner">

@@ -2,7 +2,19 @@ import { useEffect, useState } from "react";
 import Header from "../components/Header";
 import { recordProductVisit } from "../services/api";
 
-export default function BookDetailPage({ book, user, token, onLogout, onRequestLogin, onGoBack }) {
+export default function BookDetailPage({
+  book,
+  user,
+  token,
+  searchQuery,
+  setSearchQuery,
+  onSearch,
+  isSearching,
+  onLogout,
+  onRequestLogin,
+  onGoHome,
+  onGoBack,
+}) {
   const [actionMessage, setActionMessage] = useState("");
   const [actionType, setActionType] = useState("success");
 
@@ -48,13 +60,13 @@ export default function BookDetailPage({ book, user, token, onLogout, onRequestL
     <div>
       <Header
         user={user}
-        searchQuery=""
-        setSearchQuery={() => {}}
-        onSearch={() => {}}
-        isSearching={false}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        onSearch={onSearch}
+        isSearching={isSearching}
         onLogout={onLogout}
         onRequestLogin={onRequestLogin}
-        onGoHome={onGoBack}
+        onGoHome={onGoHome}
       />
 
       <div className="home-page">

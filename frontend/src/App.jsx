@@ -49,14 +49,26 @@ export default function App() {
   }
 
   // 📖 Book detail page
+  const handleHeaderSearch = (event) => {
+    event.preventDefault();
+    const q = searchQuery.trim();
+    if (!q) return;
+    handleSearch(q);
+  };
+
   if (page === "book-detail") {
     return (
       <BookDetailPage
         book={selectedBook}
         user={user}
         token={token}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        onSearch={handleHeaderSearch}
+        isSearching={false}
         onLogout={logout}
         onRequestLogin={handleLoginRequest}
+        onGoHome={handleBackToHome}
         onGoBack={handleBackFromBook}
       />
     );
